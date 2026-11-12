@@ -345,12 +345,11 @@ Los archivos se asocian durante el registro. **La modificación posterior de adj
 
 El formulario registra también **código de proyecto** y **nombre de proyecto** como contextuales opcionales; su ubicación exacta respecto de `Ticket` y `RecognizableReference` necesita revisión semántica antes de tratarlos como características aprobadas. **No se omiten como desconocidos** ni se declara un nuevo Space `Project` por su sola presencia.
 
-## 5. Informe de evaluación
+## 5. Informe de evaluación — unión discriminada
 
-Una evaluación es un Space propio, con **máximo uno por Ticket** y el `TicketId` como identidad/referencia. `EvaluationData` ahora nombra **una composición de características definida completamente**, no un placeholder ni necesariamente un Space adicional.
+**Acuerdo de modelado:** `EvaluationReport` es el Space base con identidad `TicketId`. Sus únicas variantes son `DraftEvaluationReport` y `CompletedEvaluationReport` (herencia de Spaces como notación conceptual). La variante determina la completitud: no se conserva `formalization` como campo redundante.
 
 ```pseudo
-Choice EvaluationFormalization = "Borrador" | "Formalizado"
 Choice SupportType = "Interno" | "Externo" | "Interno/externo"
 Choice SupportLevel =
     "Nivel 1 (SLA 3 hrs)" | "Nivel 2 (SLA 8 hrs)" | "Nivel 3 (SLA +1 día)"
@@ -358,7 +357,12 @@ Choice EvaluationScope = "Soporte" | "Mejora"
 Choice IncidentSolution =
     "Sí" | "No" | "En Proceso" | "Ambiente Testing" | "Derivar a Gerente Operativo"
 
-Derived EvaluationData {
+Space EvaluationReport {
+    id: TicketId                          // identidad y referencia interna compartida
+    cardinality: 0..1 per Ticket          // Draft y Completed NO coexisten
+}
+
+Space DraftEvaluationReport extends EvaluationReport {
     supportType: Optional<SupportType>
     supportLevel: Optional<SupportLevel>
     supportEntryDate: Optional<Date(<= today)>
@@ -370,108 +374,132 @@ Derived EvaluationData {
     activityStartDate: Optional<Date>
     activityEndDate: Optional<Date>
 
-    admission:
-        if both activity dates present => activityStartDate <= activityEndDate
-        // Borrador admite información parcial.
-        // Formalizar requiere las diez características, con admisibilidad válida.
+    admission: if both dates exist => activityStartDate <= activityEndDate
+    evolution: Draft -> Draft (new immutable Point)
 }
 
-Space EvaluationReport {
-    id: TicketId
-    data: EvaluationData
-    formalization: EvaluationFormalization
-    cardinality: 0..1 per Ticket
+Space CompletedEvaluationReport extends EvaluationReport {
+    supportType: SupportType
+    supportLevel: SupportLevel
+    supportEntryDate: Date(<= today)
+    scope: EvaluationScope
+    actionDescription: Text(max=500)
+    proposedSolution: Text(max=1000)
+    expectedSolutionTime: Text(max=100)
+    incidentSolution: IncidentSolution
+    activityStartDate: Date
+    activityEndDate: Date
 
-    evolution:
-        Borrador -> Borrador   // conserva borradores como nuevos Points
-        Borrador -> Formalizado
-        Formalizado -> no further evolution
+    admission: activityStartDate <= activityEndDate
+    evolution: none // Point definitivo: no edición posterior
+}
+
+Transform CompleteEvaluation(draft: DraftEvaluationReport)
+    -> Fin<CompletedEvaluationReport> {
+    requires: all ten fields present, semantically valid, and dates ordered
+    guarantees: preserves same TicketId; consumes the logical Draft variant
 }
 ```
 
-**Dudas preservadas:** finalidad de otra fecha de ingreso a soporte; autoridad y procedencia de la descripción de acción y propuesta de solución; pertinencia de «¿Se solucionó el incidente?» dentro de evaluación en vez de supervisión. Los límites 500/1000/100 están **aprobados para el modelo**, aunque no se ha verificado su implementación anterior. El nombre del SLA no crea por sí solo garantías de tiempo.
+Los campos opcionales del borrador permiten capturas parciales; la variante completada exige las diez características. Los **Points de ambas variantes son siempre inmutables**: que el borrador sea evolucionable no significa que sus propiedades se muten.
 
-## 6. Informe de aprobación operacional
+**Preguntas preservadas:** justificación de fecha de ingreso, procedencia de acción/propuesta y pertinencia de «¿Se solucionó el incidente?» en evaluación. Los máximos 500/1.000/100 están acordados para el modelo, no verificados en el servicio legado.
 
-`ApprovalData` conserva las **cinco características** del formulario; la formalización requiere tres.
+## 6. Informe de aprobación — unión discriminada
+
+Un único informe lógico por Ticket, ahora expresado como **`ApprovalReport = DraftApprovalReport | CompletedApprovalReport`**. Tres características son obligatorias al completar; las otras dos **siguen siendo legítimamente opcionales**, incluso en la variante completada.
 
 ```pseudo
 Choice ApprovalSatisfaction = "Sí" | "No" | "En Proceso" | "Otro"
 Choice ApprovalIndication =
     "Iniciar mejora" | "Iniciar soporte" |
     "Mejora en evaluación" | "Soporte en evaluación" | "Otro"
-Choice ApprovalFormalization = "Borrador" | "Formalizado"
-
-Derived ApprovalData {
-    satisfaction: Optional<ApprovalSatisfaction>          // requerido al formalizar
-    observationDate: Optional<Date>                       // opcional
-    observation: Optional<Text>                           // max por definir
-    indication: Optional<ApprovalIndication>              // requerido al formalizar
-    indicationDetail: Optional<Text(nonEmpty=true)>       // requerido al formalizar; max por definir
-}
 
 Space ApprovalReport {
     id: TicketId
-    data: ApprovalData
-    formalization: ApprovalFormalization
     cardinality: 0..1 per Ticket
     context: route "Mejora"
+}
 
-    evolution:
-        Borrador -> Borrador
-        Borrador -> Formalizado
-        Formalizado -> no further evolution
+Space DraftApprovalReport extends ApprovalReport {
+    satisfaction: Optional<ApprovalSatisfaction>
+    observationDate: Optional<Date>
+    observation: Optional<Text>                   // máximo pendiente
+    indication: Optional<ApprovalIndication>
+    indicationDetail: Optional<Text(nonEmpty=true)> // máximo pendiente
 
-    formalizationRequires:
-        satisfaction is Some
-        && indication is Some
-        && indicationDetail is Some(nonEmpty)
+    evolution: Draft -> Draft (new immutable Point)
+}
+
+Space CompletedApprovalReport extends ApprovalReport {
+    satisfaction: ApprovalSatisfaction
+    observationDate: Optional<Date>               // sigue siendo opcional
+    observation: Optional<Text>                   // sigue siendo opcional
+    indication: ApprovalIndication
+    indicationDetail: Text(nonEmpty=true)
+
+    evolution: none
+}
+
+Transform CompleteApproval(draft: DraftApprovalReport)
+    -> Fin<CompletedApprovalReport> {
+    requires: satisfaction, indication and indicationDetail present and valid
+    guarantees: preserves same TicketId; completed report immutable
 }
 ```
 
-Las opciones `"No"` o `"En Proceso"` **no demuestran** rutas de rechazo, devolución o reapertura. Falta acordar qué se aprueba y qué significa aprobación organizacional válida. La regla de avance del flujo V1 actualmente observa solo si la aprobación está formalizada.
+**No inferir** rutas de rechazo o devolución de las opciones `"No"` o `"En Proceso"`. Falta contrastar el significado organizacional de una aprobación válida; la condición de Flow Orchestration V1 observa únicamente que exista la variante Completed.
 
-## 7. Informe de supervisión
+## 7. Informe de supervisión — unión discriminada candidata
 
-`SupervisionData` define las **tres características** observadas, con evolución mientras el informe no haya alcanzado cierre. La noción `supervisionCompleted` requerida por el orquestador **no está definida todavía como característica del informe**; debe precisarse cómo se deriva.
+Aplicamos también el patrón **`SupervisionReport = DraftSupervisionReport | CompletedSupervisionReport`**. Conservamos los tres campos del modelo observado; las observaciones son **opcionales en ambas variantes**.
+
+**Límite importante:** que un informe posea estado de cierre `"Cerrado"` no es lo mismo que declarar la variante `Completed`. La nueva distinción de completitud está propuesta para nuestro diseño; **aún debe contrastarse con los seguimientos sucesivos del legacy** y con el acto organizacional de completar supervisión. No convertir todo guardado en una formalización automática.
 
 ```pseudo
-// Valores observados literalmente en el formulario documentado:
-Choice ReportClosureState =
-    "Sin Cierre" | "Cerrado" | "Con observaciones"
-
+// Selecciones del informe según formulario documentado
+Choice ReportClosureState = "Sin Cierre" | "Cerrado" | "Con observaciones"
 Choice OutOfSystemPaymentRegularization =
     "No procede" |
     "Actualizado en Plataforma" |
     "Pendiente por actualizar en Plataforma"
 
-Derived SupervisionData {
-    closure: ReportClosureState
-    paymentRegularization: OutOfSystemPaymentRegularization
-    monitoringObservations: Optional<Text(nonEmpty=true)>  // max por definir
-}
-
 Space SupervisionReport {
     id: TicketId
-    data: SupervisionData
     cardinality: 0..1 per Ticket
-
-    evolution: may produce new Points while closure != "Cerrado"
-    invariant: after closure == "Cerrado", no further evolution
-    unanswered: repeated monitoring within one report; valid closure criteria
 }
 
-Derived SupervisionCompletion {
-    value: Bool
-    rule: PendingRule("qué hecho significa Supervisión completada")
+Space DraftSupervisionReport extends SupervisionReport {
+    closure: Optional<ReportClosureState>
+    paymentRegularization: Optional<OutOfSystemPaymentRegularization>
+    monitoringObservations: Optional<Text(nonEmpty=true)> // máximo pendiente
+
+    evolution: Draft -> Draft (new immutable Point; repeated monitoring to examine)
+}
+
+Space CompletedSupervisionReport extends SupervisionReport {
+    closure: ReportClosureState
+    paymentRegularization: OutOfSystemPaymentRegularization
+    monitoringObservations: Optional<Text(nonEmpty=true)> // legítimamente opcional
+
+    evolution: none // mismo patrón de variante definitiva; verificar contra negocio
+}
+
+Transform CompleteSupervision(draft: DraftSupervisionReport)
+    -> Fin<CompletedSupervisionReport> {
+    requires: closure and paymentRegularization present and valid
+    requires: PendingRule("cuándo se declara completada la supervisión")
+    guarantees: same TicketId; Completed immutability
 }
 ```
 
-**Diferencia de vocabulario real:** el formulario / modelo de informe documenta `"Sin Cierre" | "Cerrado" | "Con observaciones"`, mientras que la proyección de Flow Orchestration acordada utiliza `"Sin cierre" | "Cerrada" | "Con observaciones"`. **No se igualan silenciosamente**: el contrato de lectura deberá definir un mapeo explícito y verificable, en particular `"Cerrado" (informe) → "Cerrada" (proyección)`.
+Esta transformación **no presupone** que solo `"Cerrado"` puede formar un Completed; la proyección acordada contempla `"Sin cierre"`, `"Cerrada"` y `"Con observaciones"` cuando `supervisionCompleted=true`. El criterio de completar, su relación con seguimientos sucesivos y la restricción de evolución posterior requieren validación; no presentamos este modelo candidato como comportamiento legacy comprobado.
+
+**Discrepancia de vocabulario:** formulario `"Sin Cierre" | "Cerrado" | "Con observaciones"` frente a proyección `"Sin cierre" | "Cerrada" | "Con observaciones"`. Requiere mapeo explícito antes de implementar.
 
 ## 8. Proyección de solo lectura para Flow Orchestration
 
-No es un agregado persistente de Ticket Service ni un Space que Flow Orchestration pueda escribir.
+La proyección permanece en **cinco características**, sin nueva persistencia. La discriminación de variantes permite expresar completitud sin flags independientes en los informes.
 
 ```pseudo
 Choice ProjectedClosureState = "Sin cierre" | "Cerrada" | "Con observaciones"
@@ -489,16 +517,21 @@ Projection TicketFlowFacts {
     invariant:  supervisionCompleted => closureState is Some
 }
 
-derive evaluationCompleted = EvaluationReport.formalization == "Formalizado"
-derive approvalCompleted   = ApprovalReport.formalization == "Formalizado"
-derive supervisionCompleted = PendingRule("completitud de supervisión")
-derive evaluationScope = evaluationCompleted
-    ? Some(EvaluationReport.data.scope) : None
-derive closureState = supervisionCompleted
-    ? Some(ExplicitClosureMapping(SupervisionReport.data.closure)) : None
+derive evaluationCompleted = current EvaluationReport is CompletedEvaluationReport
+derive approvalCompleted = current ApprovalReport is CompletedApprovalReport
+derive supervisionCompleted = current SupervisionReport is CompletedSupervisionReport
+derive evaluationScope = match current EvaluationReport {
+    CompletedEvaluationReport completed => Some(completed.scope)
+    otherwise => None
+}
+derive closureState = match current SupervisionReport {
+    CompletedSupervisionReport completed
+        => Some(ExplicitClosureMapping(completed.closure))
+    otherwise => None
+}
 ```
 
-Los cinco campos y las reglas de presencia **sí están acordados**. La derivación exacta de supervisión y el mapeo de constantes del cierre **no**. No inventar una bandera persistida nueva para satisfacer el pseudocódigo.
+La derivación de `supervisionCompleted` es **coherente dentro del modelo de variantes propuesto**, pero depende de que definamos cuándo está permitido construir un `CompletedSupervisionReport`. No afirmamos que el legacy ya lo haga. El mapeo de constantes de cierre también permanece pendiente de decisión.
 
 ## 9. Features candidatas — Ticket Service v2
 
@@ -513,39 +546,48 @@ Feature RegisterTicket {
 }
 
 Feature SaveEvaluationDraft {
-    input: TicketId + EvaluationData
-    requires: report is new or is still Borrador
-    writes: EvaluationReport(new Point)
+    input: TicketId + DraftEvaluationReport fields
+    requires: report absent or current variant is DraftEvaluationReport
+    writes: DraftEvaluationReport(new Point)
     guarantees: no flow transition
 }
 
-Feature FormalizeEvaluation {
-    input: TicketId + EvaluationData
-    requires: ten required characteristics valid; report not yet Formalizado
-    writes: EvaluationReport(formalized Point)
-    guarantees: subsequent edits rejected
-    doesNot: select the flow destination
+Feature CompleteEvaluation {
+    input: TicketId + DraftEvaluationReport
+    requires: CompleteEvaluation(draft) succeeds (all ten fields)
+    writes: CompletedEvaluationReport replacing same logical report
+    guarantees: no further report evolution
+    doesNot: choose next FlowState
 }
 
 Feature SaveApprovalDraft {
-    input: TicketId + ApprovalData
-    requires: report is new or Borrador
-    writes: ApprovalReport(new Point)
+    input: TicketId + DraftApprovalReport fields
+    requires: report absent or current variant is DraftApprovalReport
+    writes: DraftApprovalReport(new Point)
     guarantees: no flow transition
 }
 
-Feature FormalizeApproval {
-    input: TicketId + ApprovalData
-    requires: satisfaction, indication, indicationDetail present and valid
-    writes: ApprovalReport(formalized Point)
-    doesNot: transition the machine
+Feature CompleteApproval {
+    input: TicketId + DraftApprovalReport
+    requires: CompleteApproval(draft) succeeds (three required fields)
+    writes: CompletedApprovalReport replacing same logical report
+    guarantees: optional observation fields remain optional
+    doesNot: advance the machine
 }
 
-Feature RecordSupervision {
-    input: TicketId + SupervisionData
-    requires: valid report; evolution still allowed
-    writes: SupervisionReport(new Point)
-    doesNot: close the machine
+Feature SaveSupervisionDraft {
+    input: TicketId + DraftSupervisionReport fields
+    requires: report absent or current variant is DraftSupervisionReport
+    writes: DraftSupervisionReport(new Point)
+    doesNot: advance the machine
+}
+
+Feature CompleteSupervision {
+    input: TicketId + DraftSupervisionReport
+    requires: required fields present AND pending organizational completion criterion resolved
+    writes: CompletedSupervisionReport replacing same logical report
+    guarantees: no further evolution under the candidate model
+    doesNot: close the machine (Flow Orchestration decides that)
 }
 
 // Las Features de catálogos se definen con contratos y errores en §3.5.
@@ -559,10 +601,10 @@ Los mantenedores se describen como candidatos funcionales; **no se interpretan l
 
 1. No trasladar `Stage` ni `TicketStageTransitions` del legacy a Ticket Service v2: propiedad de Flow Orchestration.
 2. No recuperar edición del Ticket, asignación responsable ni gestión posterior de adjuntos como Feature.
-3. **Completitud de supervisión:** determinar cuándo `SupervisionCompletion` es verdadero; no confundir guardado con completitud.
+3. **Completitud de supervisión:** aprobar el criterio para crear `CompletedSupervisionReport` y contrastar su irreversibilidad con seguimientos repetidos. No confundir guardar un borrador con completar.
 4. **Normalización de cierre:** reconciliar etiquetas de formulario e interfaz de proyección mediante decisión expresa.
 5. **Referencias a elementos externos:** precisar identidades, tipos y permisos sin asumir que los sistemas externos están integrados.
 6. **Catálogos:** nombre normalizado, reserva de nombres desactivados y reglas de Activar/Desactivar acordadas en §3; confirmar actividad inicial y detalles de normalización aún abiertos.
 7. **Datos contextuales de proyecto:** precisar ubicación de código y nombre de proyecto en el modelo.
 8. **Compatibilidad:** definir pruebas de equivalencia semántica para reemplazar `ticket-service` por `ticket-service-v2`.
-9. **Coordinación:** formalización de informes y avance de Flow Orchestration siguen siendo escrituras separadas cuyo protocolo no está decidido.
+9. **Coordinación:** completar informes y avanzar Flow Orchestration siguen siendo escrituras separadas cuyo protocolo no está decidido.

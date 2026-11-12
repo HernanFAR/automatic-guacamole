@@ -8,7 +8,7 @@
 | --- | --- |
 | ¿Existe una solicitud válida y qué antecedentes constituyen su identidad? | Ticket Service v2 |
 | ¿Puede editarse el Ticket ya registrado? | No; Ticket Service v2 garantiza su inalterabilidad |
-| ¿Es válido / está formalizado un informe? | Ticket Service v2 |
+| ¿Es válida / está completada la variante de un informe? | Ticket Service v2 |
 | ¿En qué estado está una instancia de la máquina? | Flow Orchestration |
 | ¿Se cumplen las condiciones del próximo estado? | Flow Orchestration, usando hechos proyectados desde Ticket Service |
 | ¿Qué archivos se almacenan? | Folder Service; Ticket Service conserva referencias asociadas al registro |
@@ -26,7 +26,7 @@ case RegisterAndStart {
 }
 
 case EvaluateAndAdvance {
-    TicketService.FormalizeEvaluation(ticketId, evaluation)
+    TicketService.CompleteEvaluation(ticketId, draftEvaluation)
     facts = ReadOnlyProjection.TicketFlowFacts(ticketId)
     // Flow service evaluates the projection and performs an allowed transition.
     FlowOrchestration.AdvanceFlow(instanceId, expectedState, target)
@@ -34,14 +34,17 @@ case EvaluateAndAdvance {
 }
 
 case ApproveAndAdvance {
-    TicketService.FormalizeApproval(ticketId, approval)
+    TicketService.CompleteApproval(ticketId, draftApproval)
     FlowOrchestration.AdvanceFlow(instanceId, "Aprobación", "Supervisión")
 }
 
 case SuperviseAndMaybeClose {
-    TicketService.RecordSupervision(ticketId, supervision)
-    // Only the verified fact of completed supervision with closure="Cerrada"
-    // enables FlowOrchestration.AdvanceFlow(..., "Cerrado").
+    TicketService.SaveSupervisionDraft(ticketId, draftSupervision)
+    // CompleteSupervision is a separate candidate Feature; its business
+    // completion criterion must be approved before execution is implemented.
+    TicketService.CompleteSupervision(ticketId, draftSupervision)
+    // Only the verified fact of CompletedSupervisionReport whose projected
+    // closure is "Cerrada" enables FlowOrchestration.AdvanceFlow(..., "Cerrado").
 }
 ```
 
@@ -53,7 +56,7 @@ case SuperviseAndMaybeClose {
 2. **Formalización y avance:** interfaz real de coordinación y tratamiento de fallos parciales.
 3. **Concurrencia:** cómo impedir dos avances incompatibles y garantizar que la proyección siga siendo vigente cuando se confirma la transición.
 4. **Datos históricos:** migración de `Stage` y `TicketStageTransitions` del Ticket Service actual hacia propiedad del orquestador, con reconstrucción de historia.
-5. **Completitud de supervisión:** cómo se determina `supervisionCompleted` y qué significa tener `"Sin cierre"` o `"Con observaciones"` con completitud verdadera.
+5. **Completitud de supervisión:** qué condición permite construir `CompletedSupervisionReport`, cómo conservar seguimientos sucesivos y qué significa tener `"Sin cierre"` o `"Con observaciones"` con completitud verdadera.
 6. **Autoridad:** reglas efectivas de acceso y eventual incorporación de Audit Service.
 7. **Contrato de versión:** cómo mantener versiones antiguas, seleccionar la versión inicial para nuevas instancias y definir migraciones explícitas.
 8. **Sucesión:** qué pruebas de equivalencia y comportamiento permitirán retirar `ticket-service` en favor de `ticket-service-v2`.
