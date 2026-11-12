@@ -57,7 +57,7 @@ case SuperviseAndMaybeClose {
 
 1. **Inicio:** quién solicita iniciar la instancia y cómo se resuelve un Ticket creado sin instancia. **Ya decidido:** `TicketSupport/V1` admite una sola `FlowInstance` por Ticket; su política pertenece a `FlowSpecificationVersion`, con comprobación atómica pendiente de realización.
 2. **Formalización y avance:** interfaz real de coordinación y tratamiento de fallos parciales.
-3. **Concurrencia:** cómo impedir dos avances incompatibles y garantizar que la proyección siga siendo vigente cuando se confirma la transición.
+3. **Concurrencia y atomicidad (post-PoC):** cómo impedir dos avances incompatibles, mantener vigente la proyección al confirmar la transición y confirmar juntos el nuevo Point de `FlowInstance` y su `ExecutedTransition`. No son requisitos bloqueantes para la prueba de concepto del 13 de noviembre de 2026.
 4. **Datos históricos:** migración de `Stage` y `TicketStageTransitions` del Ticket Service actual hacia propiedad del orquestador, con reconstrucción de historia.
 5. **Historial de supervisión:** cierre decidido: solo `"Cerrado"` permite `CompletedSupervisionReport`; `"Sin Cierre"` y `"Con observaciones"` permanecen incompletos. Falta decidir cómo conservar los seguimientos sucesivos.
 6. **Autoridad:** reglas efectivas de acceso y eventual incorporación de Audit Service.
@@ -66,4 +66,4 @@ case SuperviseAndMaybeClose {
 
 ## 4. Prioridad de examen
 
-Primero validar la **admisibilidad de los Spaces** y la función pura de elegibilidad, después concretar **Features y sus resultados**, y finalmente elegir la coordinación interservicio usando casos reales de fallo y concurrencia. La plantilla ofrece estructura de proyectos, algebra y pruebas: **no decide por nosotros la semántica del dominio**.
+Para la **PoC del 13 de noviembre de 2026**, validar la admisibilidad de los Spaces, la función pura de elegibilidad y el recorrido funcional de las Features. No condicionar la entrega a transacciones atómicas entre `FlowInstance` y `ExecutedTransition` ni a concurrencia optimista; conservar estas mejoras como trabajo posterior. La plantilla ofrece estructura de proyectos, algebra y pruebas: **no decide por nosotros la semántica del dominio**.

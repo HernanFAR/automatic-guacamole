@@ -21,6 +21,10 @@ Este repositorio es el **cuaderno de realización** de dos servicios basados en 
 - No recuperar las Features descartadas de **edición de Ticket** ni **asignación de responsable**; tampoco introducir edición posterior de adjuntos. Conservar asociación de evidencias durante registro.
 - **FlowSpecification** es el Space principal del orquestador; **FlowInstance** es el de mayor uso y ejecuta una versión compatible con el tipo de elemento. La política de admisión de instancias se define en `FlowSpecificationVersion`; en `TicketSupport/V1`, cada Ticket admite **una única FlowInstance**, incluso tras finalizar y sin duplicados por cambio de versión. No añadir editor de estados, gestión dinámica de definiciones ni un motor genérico sin necesidad comprobada.
 
+## Alcance de la prueba de concepto
+
+**Fecha límite: 13 de noviembre de 2026.** `FlowSubject` es una unión discriminada cuya única variante inicial es `TicketReference`; el futuro `EndorsmentRequestReference` se incorporará cuando exista ese consumidor, sin almacenar además un string de tipo. La atomicidad entre el nuevo Point de `FlowInstance` y `ExecutedTransition`, la concurrencia optimista y las garantías fuertes de consistencia son mejoras **post-PoC**, no condiciones para esta entrega. Las fallas parciales deben seguir siendo visibles, sin atribuir al prototipo garantías que no ofrece.
+
 ## Convención de referencias
 
 - **Space interno del servicio:** conservar únicamente su identificador, por ejemplo `SystemId`, `ModuleId`, `IncidenceTypeId` o `FlowInstanceId`.

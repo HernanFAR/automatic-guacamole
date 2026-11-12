@@ -4,7 +4,7 @@
 
 ## Convención de referencias
 
-Los identificadores de Spaces **internos** son `<Space>Id`. Un elemento propietario de otro servicio se expresa con una referencia externa explícita, por ejemplo `TicketReference`. La instancia no se limita conceptualmente a Tickets: conserva **tipo de elemento y referencia**, y exige compatibilidad con su versión de especificación.
+Los identificadores de Spaces **internos** son `<Space>Id`. Un elemento propietario de otro servicio se expresa con una referencia externa explícita, por ejemplo `TicketReference`. La instancia conserva un **FlowSubject discriminado por el tipo de referencia** y exige compatibilidad con su versión de especificación. Hoy la única variante admitida es `TicketReference`; `EndorsmentRequestReference` es una ampliación futura, no una variante implementada ahora.
 
 ```pseudo
 Value FlowSpecificationId
@@ -14,17 +14,16 @@ Value FlowInstanceId
 Value ExecutedTransitionId
 
 Value TicketReference                  // Space de Ticket Service v2, externo
-Choice ElementType = "Ticket"          // otros tipos se incorporarán cuando existan
 Choice FlowVersion = "V1"              // versión constante por ahora
 Choice TicketSupportV1State =
     "Evaluación" | "Aprobación" | "Supervisión" | "Cerrado"
 
-Derived FlowSubject {
-    elementType: ElementType
-    reference: ExternalElementReference
-    // V1: elementType="Ticket" y reference: TicketReference
-    // La forma general del tipo de referencia aún se examinará con otro consumidor.
-}
+Choice FlowSubject =
+    TicketReference
+    // Futuro, al implementar ese consumidor:
+    // | EndorsmentRequestReference
+
+// El discriminante es el tipo de referencia, no un string "Ticket".
 ```
 
 ## 1. Especificación y versiones
@@ -45,7 +44,7 @@ Space FlowSpecificationVersion {
     id: FlowSpecificationVersionId
     specification: FlowSpecificationId
     version: FlowVersion
-    compatibleElementTypes: Set<ElementType>
+    compatibleSubjects: Set<FlowSubject.Variant>
     instancePolicy: InstancePolicy            // criterio de admisión al iniciar ejecuciones
     initialState: FlowState
     states: Set<FlowState>
@@ -90,7 +89,7 @@ const FlowSpecificationVersion TicketSupportV1 {
     id: TicketSupportVersionV1Id
     specification: TicketSupportSpecificationId
     version: "V1"
-    compatibleElementTypes: { "Ticket" }
+    compatibleSubjects: { TicketReference }
     instancePolicy: "SingleInstancePerSubjectAcrossVersions"
     initialState: "Evaluación"
     states: { "Evaluación", "Aprobación", "Supervisión", "Cerrado" }
@@ -129,7 +128,7 @@ constant TicketSupportV1.TerminalStates = { "Cerrado" }
 
 Los nombres de los identificadores de constantes sirven de notación, no representan valores concretos aprobados.
 
-**Alcance de la política de Tickets:** `SingleInstancePerSubjectAcrossVersions` compara el Ticket por su identidad externa, no solo por `(Ticket, FlowSpecificationVersionId)`. Por ello una instancia V1 existente, incluso terminada, impide iniciar otra para el mismo Ticket con una versión posterior. Esto es una decisión del flujo Tickets, no una regla global para todos los tipos de elementos; la forma de imponerla de manera atómica ante concurrencia queda para la realización.
+**Alcance de la política de Tickets:** `SingleInstancePerSubjectAcrossVersions` compara el Ticket por su identidad externa, no solo por `(Ticket, FlowSpecificationVersionId)`. Por ello una instancia V1 existente, incluso terminada, impide iniciar otra para el mismo Ticket con una versión posterior. Esto es una decisión del flujo Tickets, no una regla global para todos los tipos de elementos; su verificación forma parte de la PoC, pero reforzarla con garantías atómicas ante concurrencia queda explícitamente fuera de alcance de la entrega del 13 de noviembre de 2026.
 
 ## 2. Instancia e historia de ejecución
 
@@ -140,7 +139,7 @@ Space FlowInstance {
     subject: FlowSubject
     currentState: FlowState
 
-    requires: subject.elementType in specificationVersion.compatibleElementTypes
+    requires: VariantOf(subject) in specificationVersion.compatibleSubjects
     requires: specificationVersion.instancePolicy admits a new instance for subject
     invariant: specificationVersion and subject do not change across Points
     invariant: currentState belongs to specificationVersion.states
@@ -216,7 +215,7 @@ derive closureState = match current SupervisionReport {
 
 `EvaluationReport`, `ApprovalReport` y `SupervisionReport` son **Spaces externos** para el orquestador; el pseudocódigo de la consulta describe cómo interpretar sus datos persistidos, no incorpora sus Spaces al modelo propietario del flujo. [Las variantes y características están definidas en Ticket Service v2](ticket-service-v2.md#5-informe-de-evaluación--unión-discriminada).
 
-**Criterio acordado:** `CompletedSupervisionReport` existe únicamente cuando el informe tiene `closure="Cerrado"`; el orquestador proyecta ese hecho como `supervisionCompleted=true` y `closureState=Some("Cerrada")`. Para `"Sin Cierre"` o `"Con observaciones"` la supervisión sigue incompleta (`false`, `None`). Las garantías de consistencia/concurrencia de lecturas y transiciones todavía están por definir.
+**Criterio acordado:** `CompletedSupervisionReport` existe únicamente cuando el informe tiene `closure="Cerrado"`; el orquestador proyecta ese hecho como `supervisionCompleted=true` y `closureState=Some("Cerrada")`. Para `"Sin Cierre"` o `"Con observaciones"` la supervisión sigue incompleta (`false`, `None`). Las garantías fuertes de consistencia/concurrencia de lecturas y transiciones se reservan como evolución posterior a la PoC.
 
 `TicketFlowFacts` es una **proyección calculada de solo lectura**, no un agregado persistido, ni un nuevo Space con identidad independiente. Se mantiene exactamente en cinco características; no se agregan antecedentes del Ticket que no participen en condiciones.
 
@@ -259,6 +258,8 @@ function EligibleTransitions(
 
 No se crea un DSL de condiciones, almacenamiento de predicados o un `RuleSpace`. La posibilidad de representar condiciones como características del Space es una **investigación posterior**, basada en varios casos implementados.
 
+**Alcance de entrega (PoC, 13 de noviembre de 2026):** modelar y demostrar el flujo funcional es prioritario. Atomicidad de las escrituras `FlowInstance`/`ExecutedTransition`, concurrencia optimista y consistencia fuerte con las lecturas externas son **deseables a largo plazo, no requisitos bloqueantes** de esta realización. El riesgo de una escritura parcial debe quedar reconocido, sin declarar garantías que no se implementaron.
+
 ## 5. Features candidatas
 
 ```pseudo
@@ -266,10 +267,10 @@ Feature StartFlow {
     input: FlowSpecificationVersionId + FlowSubject
     requires:
         specificationVersion exists among recognized constant versions
-        && subject.elementType in specificationVersion.compatibleElementTypes
+        && VariantOf(subject) in specificationVersion.compatibleSubjects
         && referenced element exists (verified by appropriate owner)
         && InstanceAdmission(specificationVersion.instancePolicy, subject, existingInstances)
-        && atomic uniqueness enforcement succeeds
+        // PoC: no exige todavía imposición atómica frente a carreras concurrentes
     writes: FlowInstance(
         specificationVersion,
         subject,
@@ -298,10 +299,11 @@ Feature AdvanceFlow {
     reads: current FlowInstance + current TicketFlowFacts
     requires:
         requestedTransitionId in EligibleTransitions(specificationVersion, currentState, facts)
-        && concurrency checks succeed
+        // PoC: no exige todavía concurrencia optimista / control atómico
         && actor authorization has been verified by its owner
     writes: next immutable FlowInstance Point + ExecutedTransition with requestedTransitionId
-    guarantees: either a coherent state change and its fact, or failure
+    intent: persist next FlowInstance Point and ExecutedTransition
+    limitation: PoC does not yet guarantee atomic all-or-nothing persistence
     doesNot: write Ticket, EvaluationReport, ApprovalReport, SupervisionReport
 }
 ```
@@ -323,4 +325,4 @@ Feature AdvanceFlow {
 | Supervisión | Completada, Cerrada | Cerrado |
 | Cerrado | Cualquier proyección | Ninguna |
 
-Estos casos prueban la **semántica de elegibilidad**; las pruebas de autorización, coherencia de escritura y concurrencia son adicionales.
+Estos casos prueban la **semántica de elegibilidad**. La PoC debe hacer visible cualquier falla de escritura de instancia o historial; **no declara garantizada** su atomicidad. Las pruebas de concurrencia fuerte, autorización integral y recuperación ante fallos parciales corresponden a una evolución posterior.
