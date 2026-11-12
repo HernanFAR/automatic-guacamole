@@ -1,0 +1,36 @@
+# Serviu — exploración de Ticket Service v2 y Flow Orchestration Service
+
+**Estado:** pseudocódigo de diseño, no código ejecutable ni contrato implementado. Primera iteración: 2026-11-12.
+
+Este repositorio es el **cuaderno de realización** de dos servicios basados en [template-service v0.1.1](https://github.com/atom-dev-serviu/template-service/tree/v0.1.1). No sustituye la documentación propietaria del caso Serviu, no constituye una especificación normativa de VSlices y no presupone un motor de procesos configurable.
+
+## Recorrido
+
+1. [Ticket Service v2 — Spaces y Features](ticket-service-v2.md).
+2. [Flow Orchestration Service — Spaces y Features](flow-orchestration-service.md).
+3. [Contrato entre ambos — decisiones y preguntas](integration-contract.md).
+
+## Decisiones establecidas
+
+- `ticket-service-v2` posee el Ticket **inalterable tras el registro**, los informes únicos por Ticket y sus reglas de validez/formalización, referencias de evidencias y catálogos de clasificación.
+- `flow-orchestration-service` posee **identidad, versión, estado y trayectoria** de cada máquina de estados. No escribe informes ni Tickets.
+- El primer flujo de Tickets se define **solo mediante constantes**, identificado por `TicketSupport / V1`: `Evaluación | Aprobación | Supervisión | Cerrado`.
+- El orquestador decide la habilitación usando una **proyección de lectura con cinco características**: evaluación completada, alcance, aprobación completada, supervisión completada y estado de cierre. El alcance y cierre solo están presentes tras completar sus respectivos informes.
+- Los Points son inmutables. Evolución de un informe borrador e iteración de una instancia de flujo producen nuevos Points, no mutaciones del Point anterior.
+- Guardar un borrador **no avanza el flujo**. Formalizar datos en Ticket Service y ejecutar una transición de Flow Orchestration son responsabilidades distintas.
+- No recuperar las Features descartadas de **edición de Ticket** ni **asignación de responsable**; tampoco introducir edición posterior de adjuntos. Conservar asociación de evidencias durante registro.
+- No añadir un `DefinitionSpace` persistido, un diseñador de estados o un motor genérico sin necesidad comprobada.
+
+## Convención del pseudocódigo
+
+Los bloques `pseudo` describen **significado, admisibilidad, Feature, requisito y resultado**. No son sintaxis C# ni una API VSlices válida. `Choice<...>`, `Reference<...>`, `Optional<...>`, `Fin<...>` y `Point<...>` son notación de diseño. Los nombres de Features son candidatos; pueden agruparse o dividirse tras estudiar los contratos reales.
+
+## Fuentes y procedencia
+
+- [Spaces del sistema Tickets](https://github.com/atom-dev-serviu/documentation/blob/main/systems/serviu-tickets/spaces.md)
+- [Features del sistema Tickets y distribución de responsabilidades](https://github.com/atom-dev-serviu/documentation/blob/main/systems/serviu-tickets/system-features.md)
+- [Spaces y transiciones de Flow Orchestration V1](https://github.com/atom-dev-serviu/documentation/blob/main/systems/serviu-tickets/flow-orchestration-spaces.md)
+- [Work Process organizacional](https://github.com/atom-dev-serviu/documentation/blob/main/organization/tickets/management-process.md)
+- [Service Template — arquitectura](https://github.com/atom-dev-serviu/template-service/blob/v0.1.1/docs/architecture/README.md)
+
+**Límite:** crear estos documentos no crea los servicios, tablas, endpoints ni validaciones runtime.
