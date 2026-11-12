@@ -13,13 +13,13 @@ Este repositorio es el **cuaderno de realización** de dos servicios basados en 
 ## Decisiones establecidas
 
 - `ticket-service-v2` posee el Ticket **inalterable tras el registro**, los informes únicos por Ticket y sus reglas de validez/formalización, referencias de evidencias y catálogos de clasificación.
-- `flow-orchestration-service` posee **identidad, versión, estado y trayectoria** de cada máquina de estados. No escribe informes ni Tickets.
-- El primer flujo de Tickets se define **solo mediante constantes**, identificado por `TicketSupport / V1`: `Evaluación | Aprobación | Supervisión | Cerrado`.
+- `flow-orchestration-service` reconoce **FlowSpecification**, versiones identificables, transiciones constantes e instancias de ejecución con estado e historia. No escribe informes ni Tickets.
+- El primer flujo de Tickets se define **solo mediante constantes**, identificado por `TicketSupport / V1`: `Evaluación | Aprobación | Supervisión | Cerrado`. Cada versión tiene ID y unicidad por `(specification, version)`; cada transición condicional tiene ID y unicidad por `(specificationVersion, currentState, nextState)`. Sus **condiciones se implementan en código**, no mediante características configurables del Space por ahora.
 - El orquestador **es propietario de la definición y consulta** de una **proyección de lectura con cinco características**, obtenida sobre tablas de Ticket Service v2 sin escribirlas ni replicarlas: evaluación completada, alcance, aprobación completada, supervisión completada y estado de cierre. El alcance y cierre solo están presentes tras completar sus respectivos informes.
 - Los Points son inmutables. Evolución de un informe borrador e iteración de una instancia de flujo producen nuevos Points, no mutaciones del Point anterior.
 - Guardar un borrador **no avanza el flujo**. Formalizar datos en Ticket Service y ejecutar una transición de Flow Orchestration son responsabilidades distintas.
 - No recuperar las Features descartadas de **edición de Ticket** ni **asignación de responsable**; tampoco introducir edición posterior de adjuntos. Conservar asociación de evidencias durante registro.
-- No añadir un `DefinitionSpace` persistido, un diseñador de estados o un motor genérico sin necesidad comprobada.
+- **FlowSpecification** es el Space principal del orquestador; **FlowInstance** es el de mayor uso y ejecuta una versión compatible con el tipo de elemento. No añadir editor de estados, gestión dinámica de definiciones ni un motor genérico sin necesidad comprobada.
 
 ## Convención de referencias
 
