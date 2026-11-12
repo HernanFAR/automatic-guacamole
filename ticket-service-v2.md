@@ -114,7 +114,7 @@ La referencia manual debe seguir disponible incluso en sistemas integrados. La c
 ### 3.1 Características compartidas
 
 ```pseudo
-Choice Activity = "Activo" | "Desactivado"
+Choice ActivationStatus = "Active" | "Inactive"
 Choice IntegrationCondition = "Integrated" | "NonIntegrated"
 
 // No crea otro Space. Es una característica de cada catálogo.
@@ -147,7 +147,7 @@ Unique(IncidenceType.system, IncidenceType.name.semanticKey)
 
 **Nombre normalizado:** concepto de valor reutilizable para toda característica que funcione como nombre identificativo, clave de unicidad o criterio de búsqueda por nombre. Las Features no comparan texto bruto; comparan su equivalencia semántica normalizada. La normalización especificada hasta ahora elimina diferencias por capitalización y espacios exteriores. No presupone eliminar acentos ni modificar espacios interiores. Los nombres de elementos desactivados **siguen reservados** en su ámbito. El nombre visible y la clave semántica son dos representaciones del mismo valor, no dos Spaces de negocio.
 
-**Actividad:** característica evolucionable que identifica si un elemento está activo o desactivado, sin cambiar su identidad. Se expresa mediante constantes, sin un nuevo Space. Queda por definir solo la actividad inicial de creación.
+**ActivationStatus:** característica evolucionable que identifica si un elemento está activo o desactivado, sin cambiar su identidad. Se expresa mediante constantes, sin un nuevo Space. Queda por definir solo la estado inicial de activación de creación.
 
 ### 3.2 System
 
@@ -156,7 +156,7 @@ Space System {
     id: SystemId
     name: CatalogueName                // clave normalizada única, incluso desactivados
     integration: IntegrationCondition
-    activity: Activity                 // nuevos Points para cambios admitidos
+    activationStatus: ActivationStatus                 // nuevos Points para cambios admitidos
 
     modules: Derived<Sequence<Reference<Module>>>
     incidenceTypes: Derived<Sequence<Reference<IncidenceType>>>
@@ -181,7 +181,7 @@ Space Module {
     id: ModuleId
     name: CatalogueName
     system: Reference<System>
-    activity: Activity
+    activationStatus: ActivationStatus
 
     invariant: id and system do not change across Points
     invariant: name.semanticKey unique within referenced System, including inactive
@@ -198,7 +198,7 @@ Space IncidenceType {
     id: IncidenceTypeId
     name: CatalogueName
     system: Reference<System>
-    activity: Activity
+    activationStatus: ActivationStatus
 
     invariant: id and system do not change across Points
     invariant: name unique within referenced System
@@ -213,44 +213,44 @@ Space IncidenceType {
 Feature CreateSystem {
     input: name: CatalogueName
     requires: no System with same normalized name, including inactive
-    writes: System(name, integration="NonIntegrated", activity=PendingInitialActivity)
+    writes: System(name, integration="NonIntegrated", activationStatus=PendingInitialActivationStatus)
     // Los Systems Integrated no se crean mediante este mantenedor.
 }
 
 Feature EditSystem {
     input: SystemId + newName: CatalogueName
     requires: System exists by ID
-              && System.activity == "Activo"
+              && System.activationStatus == "Active"
               && newName normalized unique in System catalogue, including inactive
-    writes: new Point with same ID, IntegrationCondition and Activity; new Name only
+    writes: new Point with same ID, IntegrationCondition and ActivationStatus; new Name only
 }
 
 Feature CreateModule {
     input: system: Reference<System> + name: CatalogueName
     requires: related System exists
               && normalized name unique among all Module of that System, including inactive
-    writes: Module(system, name, activity=PendingInitialActivity)
+    writes: Module(system, name, activationStatus=PendingInitialActivationStatus)
 }
 Feature EditModule {
     input: ModuleId + newName: CatalogueName
     requires: Module exists by ID
-              && Module.activity == "Activo"
+              && Module.activationStatus == "Active"
               && newName normalized unique among all Modules of same System, including inactive
-    writes: new Point with same ID, same System, same Activity; new Name only
+    writes: new Point with same ID, same System, same ActivationStatus; new Name only
 }
 
 Feature CreateIncidenceType {
     input: system: Reference<System> + name: CatalogueName
     requires: related System exists
               && normalized name unique among all IncidenceType of that System, including inactive
-    writes: IncidenceType(system, name, activity=PendingInitialActivity)
+    writes: IncidenceType(system, name, activationStatus=PendingInitialActivationStatus)
 }
 Feature EditIncidenceType {
     input: IncidenceTypeId + newName: CatalogueName
     requires: IncidenceType exists by ID
-              && IncidenceType.activity == "Activo"
+              && IncidenceType.activationStatus == "Active"
               && newName normalized unique among all IncidenceType of same System, including inactive
-    writes: new Point with same ID, same System, same Activity; new Name only
+    writes: new Point with same ID, same System, same ActivationStatus; new Name only
 }
 ```
 
@@ -259,29 +259,29 @@ Feature EditIncidenceType {
 ```pseudo
 Feature Activate<Catalogue> {
     input: Id<Catalogue>
-    requires: exists by ID && current.activity == "Desactivado"
-    rejects: missing ID; current.activity == "Activo" // ya está activo
-    writes: new Point(activity="Activo"), same identity and other characteristics
+    requires: exists by ID && current.activationStatus == "Inactive"
+    rejects: missing ID; current.activationStatus == "Active" // ya está activo
+    writes: new Point(activationStatus="Active"), same identity and other characteristics
 }
 
 Feature Deactivate<Catalogue> {
     input: Id<Catalogue>
-    requires: exists by ID && current.activity == "Activo"
-    rejects: missing ID; current.activity == "Desactivado"
-    writes: new Point(activity="Desactivado"), same identity and other characteristics
+    requires: exists by ID && current.activationStatus == "Active"
+    rejects: missing ID; current.activationStatus == "Inactive"
+    writes: new Point(activationStatus="Inactive"), same identity and other characteristics
 }
 
-ActivityTransitionRules {
-    "Desactivado" -> "Activo"       // Activate: permitido
-    "Activo" -> "Activo"           // Activate: error, ya activo
-    "Activo" -> "Desactivado"       // Deactivate: permitido
-    "Desactivado" -> "Desactivado" // Deactivate: error, ya desactivado
+ActivationStatusTransitionRules {
+    "Inactive" -> "Active"       // Activate: permitido
+    "Active" -> "Active"           // Activate: error, ya activo
+    "Active" -> "Inactive"       // Deactivate: permitido
+    "Inactive" -> "Inactive" // Deactivate: error, ya desactivado
 }
 ```
 
 **Reglas de error acordadas:** editar y desactivar requieren identidad existente y actividad `"Activo"`; activar requiere identidad existente y actividad `"Desactivado"`. ID inexistente siempre produce error. Activar algo ya activo y desactivar algo ya desactivado producen error. La errata anterior sobre Activar quedó expresamente corregida por Hernán.
 
-**Pendientes que sí importan:** estado inicial de actividad al crear; equivalencia de acentos, normalización Unicode y espacios interiores; posibilidad de activar/desactivar módulos o incidencias cuando su System esté desactivado; precondición de actividad del System al crear Module/IncidenceType. Ninguno se deduce de la UI.
+**Pendientes que sí importan:** estado inicial de activación al crear; equivalencia de acentos, normalización Unicode y espacios interiores; posibilidad de activar/desactivar módulos o incidencias cuando su System esté desactivado; precondición de estado de activación del System al crear Module/IncidenceType. Ninguno se deduce de la UI.
 
 ### 3.6 Ejemplos de equivalencia para pruebas
 
@@ -297,8 +297,8 @@ CreateIncidenceType(systemA, "Pagos"); CreateIncidenceType(systemA, "pagos ") =>
 
 ActivateSystem(activeId) => Error(AlreadyActive)
 DeactivateSystem(inactiveId) => Error(AlreadyInactive)
-ActivateSystem(inactiveId) => Point(activity="Activo")
-DeactivateSystem(activeId) => Point(activity="Desactivado")
+ActivateSystem(inactiveId) => Point(activationStatus="Active")
+DeactivateSystem(activeId) => Point(activationStatus="Inactive")
 ```
 
 Estos ejemplos documentan reglas semánticas, no firmas ni códigos de error implementados.
