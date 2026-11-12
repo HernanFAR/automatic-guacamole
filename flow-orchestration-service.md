@@ -1,60 +1,153 @@
 # Flow Orchestration Service — máquina TicketSupport V1
 
-**Estado:** pseudocódigo de la versión fija inicial; basado en [la definición propietaria](https://github.com/atom-dev-serviu/documentation/blob/main/systems/serviu-tickets/flow-orchestration-spaces.md). No se implementa un diseñador de flujos ni un grafo persistido.
+**Estado:** pseudocódigo de la versión fija inicial, con FlowSpecification como Space principal; basado en [la definición propietaria](https://github.com/atom-dev-serviu/documentation/blob/main/systems/serviu-tickets/flow-orchestration-spaces.md). No se implementa un diseñador de flujos ni un grafo persistido.
 
 ## Convención de referencias
 
-`FlowInstanceId` es identificador de un Space interno del orquestador; `TicketReference` es referencia explícita a un Space de Ticket Service v2. No se utiliza `Reference<A>`.
+Los identificadores de Spaces **internos** son `<Space>Id`. Un elemento propietario de otro servicio se expresa con una referencia externa explícita, por ejemplo `TicketReference`. La instancia no se limita conceptualmente a Tickets: conserva **tipo de elemento y referencia**, y exige compatibilidad con su versión de especificación.
 
 ```pseudo
-Value TicketReference       // referencia al Ticket de otro servicio
-Value FlowInstanceId        // identificador interno del orquestador
-Value TransitionId          // identificador interno de transición
-```
+Value FlowSpecificationId
+Value FlowSpecificationVersionId
+Value ConditionalTransitionId
+Value FlowInstanceId
+Value ExecutedTransitionId
 
-## 1. Selecciones constantes
-
-```pseudo
-Choice FlowKind = "TicketSupport"
-Choice FlowVersion = "V1"
-
+Value TicketReference                  // Space de Ticket Service v2, externo
+Choice ElementType = "Ticket"          // otros tipos se incorporarán cuando existan
+Choice FlowVersion = "V1"              // versión constante por ahora
 Choice TicketSupportV1State =
     "Evaluación" | "Aprobación" | "Supervisión" | "Cerrado"
 
-constant TicketSupportV1.InitialState = "Evaluación"
-constant TicketSupportV1.TerminalStates = ["Cerrado"]
+Derived FlowSubject {
+    elementType: ElementType
+    reference: ExternalElementReference
+    // V1: elementType="Ticket" y reference: TicketReference
+    // La forma general del tipo de referencia aún se examinará con otro consumidor.
+}
 ```
 
-El estado representa la **situación de la máquina**, no un Work Flow organizacional necesariamente activo. `Cerrado` es válido como estado terminal.
+## 1. Especificación y versiones
 
-## 2. Spaces candidatos
+**FlowSpecification es el Space conceptual principal.** Identifica una máquina de estados reconocible y tiene nombre; una especificación puede tener varias versiones. **FlowInstance es el Space de ejecución más utilizado**, no la definición de la máquina.
+
+```pseudo
+Space FlowSpecification {
+    id: FlowSpecificationId
+    name: Text(min=1, max=PendingRule("límite de nombre"))
+    // ¿Nombre normalizado y unicidad? por decidir para este catálogo.
+}
+
+Space FlowSpecificationVersion {
+    id: FlowSpecificationVersionId
+    specification: FlowSpecificationId
+    version: FlowVersion
+    compatibleElementTypes: Set<ElementType>
+    initialState: FlowState
+    states: Set<FlowState>
+
+    unique: (specification, version)
+    invariant: specification is not changed
+    invariant: a published version retains its original semantics
+    transitions: Derived<Set<ConditionalTransitionId>>
+}
+
+Space ConditionalTransition {
+    id: ConditionalTransitionId
+    specificationVersion: FlowSpecificationVersionId
+    currentState: FlowState
+    nextState: FlowState
+
+    unique: (specificationVersion, currentState, nextState)
+    // La misma pareja de estados puede existir en versiones distintas.
+    // La condición de habilitación NO se modela como característica todavía.
+}
+```
+
+**Reglas de transición en código, por ahora.** `ConditionalTransition` identifica una relación admisible entre dos estados. El cálculo que determina si está habilitada vive en **funciones de código específicas de la versión**, no en un `Expression`, `Predicate`, JSON ni catálogo de reglas dentro del Space. Revisaremos si conviene modelar las condiciones como características cuando existan varios casos reales que justifiquen el mecanismo.
+
+**Estado de la realización:** la especificación `TicketSupport`, su versión V1 y las transiciones son **definidas por constantes**. Estos Spaces reconocen identidad y unicidad semánticas, pero **no obligan a crear tablas o Features CRUD** para especificaciones, versiones o transiciones. La gestión dinámica sigue fuera de alcance.
+
+### TicketSupport V1 — valores constantes
+
+```pseudo
+const FlowSpecification TicketSupport {
+    id: TicketSupportSpecificationId
+    name: "TicketSupport"
+}
+
+const FlowSpecificationVersion TicketSupportV1 {
+    id: TicketSupportVersionV1Id
+    specification: TicketSupportSpecificationId
+    version: "V1"
+    compatibleElementTypes: { "Ticket" }
+    initialState: "Evaluación"
+    states: { "Evaluación", "Aprobación", "Supervisión", "Cerrado" }
+}
+
+const ConditionalTransition TicketEvaluationToApproval {
+    id: TicketEvaluationToApprovalId
+    specificationVersion: TicketSupportVersionV1Id
+    currentState: "Evaluación"
+    nextState: "Aprobación"
+}
+
+const ConditionalTransition TicketEvaluationToSupervision {
+    id: TicketEvaluationToSupervisionId
+    specificationVersion: TicketSupportVersionV1Id
+    currentState: "Evaluación"
+    nextState: "Supervisión"
+}
+
+const ConditionalTransition TicketApprovalToSupervision {
+    id: TicketApprovalToSupervisionId
+    specificationVersion: TicketSupportVersionV1Id
+    currentState: "Aprobación"
+    nextState: "Supervisión"
+}
+
+const ConditionalTransition TicketSupervisionToClosed {
+    id: TicketSupervisionToClosedId
+    specificationVersion: TicketSupportVersionV1Id
+    currentState: "Supervisión"
+    nextState: "Cerrado"
+}
+
+constant TicketSupportV1.TerminalStates = { "Cerrado" }
+```
+
+Los nombres de los identificadores de constantes sirven de notación, no representan valores concretos aprobados.
+
+## 2. Instancia e historia de ejecución
 
 ```pseudo
 Space FlowInstance {
     id: FlowInstanceId
-    subject: TicketReference          // Ticket es Space externo: Ticket Service v2
-    kind: FlowKind                     // "TicketSupport" in V1
-    version: FlowVersion               // "V1" in V1
-    currentState: TicketSupportV1State
+    specificationVersion: FlowSpecificationVersionId
+    subject: FlowSubject
+    currentState: FlowState
 
-    invariant: subject, kind and version do not change across Points
-    invariant: currentState evolves only by an admissible transition
-    invariant: all Points are immutable
-    invariant: a V1 instance is interpreted by V1 rules, also after V2 exists
+    requires: subject.elementType in specificationVersion.compatibleElementTypes
+    invariant: specificationVersion and subject do not change across Points
+    invariant: currentState belongs to specificationVersion.states
+    invariant: currentState evolves only through an eligible ConditionalTransition
+    invariant: V1 instances continue under V1 rules after new versions appear
 }
 
 Space ExecutedTransition {
-    id: TransitionId
-    instance: FlowInstanceId           // Space interno: solo identificador
-    from: TicketSupportV1State
-    to: TicketSupportV1State
+    id: ExecutedTransitionId
+    instance: FlowInstanceId
+    transition: ConditionalTransitionId
+    from: FlowState
+    to: FlowState
     occurredAt: Instant
 
-    invariant: immutable past fact, not a proposed transition or failed attempt
+    invariant: immutable historical fact, not a potential transition
+    invariant: transition belongs to the version of the instance
 }
 ```
 
-La definición `(kind, version) -> transition rules` existe como **conjunto de constantes**. No hay `FlowDefinition` persistido inicialmente; si alguna vez necesitamos V2, debe conservarse la interpretación de las instancias V1.
+Los estados representan **situaciones de la máquina**, no necesariamente actividades de trabajo. `"Cerrado"` es el estado terminal de TicketSupport V1. Iniciar una instancia en `"Evaluación"` es distinto de ejecutar una transición entre dos estados existentes.
 
 ## 3. Proyección de Ticket propietaria de Flow Orchestration
 
@@ -111,50 +204,62 @@ derive closureState = match current SupervisionReport {
 
 `TicketFlowFacts` es una **proyección calculada de solo lectura**, no un agregado persistido, ni un nuevo Space con identidad independiente. Se mantiene exactamente en cinco características; no se agregan antecedentes del Ticket que no participen en condiciones.
 
-## 4. Función pura de transiciones admisibles
+## 4. Condiciones de transición definidas en código
+
+Una `ConditionalTransition` existe como relación constante `(currentState, nextState)`, pero **su existencia no autoriza el avance**. La condición se evalúa como función de código para `TicketSupport/V1`, sobre `TicketFlowFacts` (proyección de lectura definida en este servicio).
 
 ```pseudo
 function EligibleTransitions(
-    state: TicketSupportV1State,
+    version: FlowSpecificationVersionId,
+    currentState: FlowState,
     facts: TicketFlowFacts
-) -> Set<TicketSupportV1State> =
-    match state {
-        "Evaluación" when
+) -> Set<ConditionalTransitionId> =
+    match (version, currentState) {
+        (TicketSupportVersionV1Id, "Evaluación") when
             facts.evaluationCompleted
             && facts.evaluationScope == Some("Mejora")
-            => { "Aprobación" }
+            => { TicketEvaluationToApprovalId }
 
-        "Evaluación" when
+        (TicketSupportVersionV1Id, "Evaluación") when
             facts.evaluationCompleted
             && facts.evaluationScope == Some("Soporte")
-            => { "Supervisión" }
+            => { TicketEvaluationToSupervisionId }
 
-        "Aprobación" when facts.approvalCompleted
-            => { "Supervisión" }
+        (TicketSupportVersionV1Id, "Aprobación") when facts.approvalCompleted
+            => { TicketApprovalToSupervisionId }
 
-        "Supervisión" when
+        (TicketSupportVersionV1Id, "Supervisión") when
             facts.supervisionCompleted
             && facts.closureState == Some("Cerrada")
-            => { "Cerrado" }
+            => { TicketSupervisionToClosedId }
 
         otherwise => {}
     }
 
-// No implicit routes for "Sin cierre" or "Con observaciones".
-// No outgoing transitions from "Cerrado" in V1.
+// El destino de cada transición se obtiene de su definición constante.
+// "Sin cierre" y "Con observaciones" no habilitan rutas nuevas.
+// "Cerrado" no tiene transiciones salientes en V1.
 ```
 
-La relación de origen y destino **no basta**: cada transición requiere satisfacer su condición sobre la proyección. Un nuevo borrador no cambia el estado del flujo.
+No se crea un DSL de condiciones, almacenamiento de predicados o un `RuleSpace`. La posibilidad de representar condiciones como características del Space es una **investigación posterior**, basada en varios casos implementados.
 
 ## 5. Features candidatas
 
 ```pseudo
 Feature StartFlow {
-    input: TicketReference + FlowKind("TicketSupport") + FlowVersion("V1")
-    requires: Ticket exists; duplicate/uniqueness policy to define
-    writes: FlowInstance(initialState="Evaluación")
-    guarantees: instance is bound to V1 rules
-    note: start is not a transition between two existing states
+    input: FlowSpecificationVersionId + FlowSubject
+    requires:
+        specificationVersion exists among recognized constant versions
+        && subject.elementType in specificationVersion.compatibleElementTypes
+        && referenced element exists (verified by appropriate owner)
+        && duplicate/uniqueness policy for instances is resolved
+    writes: FlowInstance(
+        specificationVersion,
+        subject,
+        currentState=specificationVersion.initialState
+    )
+    guarantees: instance is bound to the selected version
+    note: starting is not a transition between two existing states
 }
 
 Feature InspectFlow {
@@ -166,18 +271,18 @@ Feature InspectFlow {
 Feature InspectEligibleTransitions {
     input: FlowInstanceId
     reads: FlowInstance + TicketFlowFacts
-    returns: EligibleTransitions(currentState, facts)
+    returns: EligibleTransitions(specificationVersion, currentState, facts)
     doesNot: grant authority to act
 }
 
 Feature AdvanceFlow {
-    input: FlowInstanceId + expectedCurrentState + requestedDestination
+    input: FlowInstanceId + expectedCurrentState + requestedTransitionId
     reads: current FlowInstance + current TicketFlowFacts
     requires:
-        requestedDestination in EligibleTransitions(currentState, facts)
+        requestedTransitionId in EligibleTransitions(specificationVersion, currentState, facts)
         && concurrency checks succeed
         && actor authorization has been verified by its owner
-    writes: next immutable FlowInstance Point + ExecutedTransition
+    writes: next immutable FlowInstance Point + ExecutedTransition with requestedTransitionId
     guarantees: either a coherent state change and its fact, or failure
     doesNot: write Ticket, EvaluationReport, ApprovalReport, SupervisionReport
 }
@@ -187,7 +292,7 @@ Feature AdvanceFlow {
 
 ## 6. Casos mínimos para validar el modelo
 
-| Estado | Proyección relevante | Transiciones habilitadas |
+| Estado | Proyección relevante | Destinos de las transiciones habilitadas |
 | --- | --- | --- |
 | Evaluación | Evaluación incompleta | Ninguna |
 | Evaluación | Completa, Alcance Soporte | Supervisión |
