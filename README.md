@@ -9,6 +9,7 @@ Este repositorio es el **cuaderno de realización** de dos servicios basados en 
 1. [Ticket Service v2 — Spaces y Features](ticket-service-v2.md).
 2. [Flow Orchestration Service — Spaces y Features](flow-orchestration-service.md).
 3. [Contrato entre ambos — decisiones y preguntas](integration-contract.md).
+4. [Folder Service — estado actual y preparación de integración](folder-service.md).
 
 ## Decisiones establecidas
 
