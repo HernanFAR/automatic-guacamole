@@ -121,9 +121,11 @@ Projection FileMetadata {
 
 La proyección **pertenece a Folder Service**, porque él es propietario de los archivos y de esta consulta; no debe moverse al orquestador. No es un nuevo Space persistido. La realización SQL usa `DATALENGTH(Content)`.
 
-## 4. Features del servicio
+## 4. Features seleccionadas por consumo real de Ticket Support Product
 
-Estas Features son genéricas, aunque Ticket Support Product solo necesite parte de ellas. Los contratos conservan las operaciones observadas en [`Folders.Work/FolderFeatures.cs`](https://github.com/atom-dev-serviu/folder-service/blob/main/src/Folders.Work/FolderFeatures.cs) y [`FileMetadata.cs`](https://github.com/atom-dev-serviu/folder-service/blob/main/src/Folders.Work/FileMetadata.cs).
+**Alcance acordado:** modelar únicamente las capacidades utilizadas por [`ITicketFolderFiles` y `TicketAttachmentOperations`](https://github.com/atom-dev-serviu/ticket-support-product/blob/main/src/TicketSupport.Work/Tickets/TicketAttachmentOperations.cs): `AddFile` (llamada `Upload` en el adaptador), `GetFileMetadata` (`ReadMetadata`), `DownloadFile` (`Download`) y `RemoveFile` (`Remove`). [`HttpTicketFolderFiles`](https://github.com/atom-dev-serviu/ticket-support-product/blob/main/src/TicketSupport.Grounding/Tickets/HttpTicketFolderFiles.cs) confirma las cuatro llamadas HTTP. **Se omite `CopyFile` de este modelo** porque el Product no la consume. Esto no implica retirar código ni endpoints existentes del repositorio propietario de Folder Service.
+
+`RemoveFile` está presente en el **Product actual** como retiro y como limpieza compensatoria tras falla al conservar una referencia. En la PoC de Ticket v2, que no permite editar adjuntos luego del registro, **no habilitaremos esa operación como Feature de usuario**. Su existencia genérica es útil para limpieza/compatibilidad, sin redefinir la inalterabilidad del Ticket.
 
 ```pseudo
 Feature AddFile {
@@ -132,15 +134,6 @@ Feature AddFile {
     writes: new Folder Point including new AttachedFile
     returns: AttachedFileId + metadata
     guarantees: newly generated identity and retained bytes, MIME, name, audit
-}
-
-Feature CopyFile {
-    input: source: FolderPath + file: AttachedFileId + destination: FolderPath
-    requires: file exists in source
-    writes: new destination Folder Point with copied AttachedFile
-    returns: new AttachedFileId
-    guarantees: new identity, same name, bytes, MIME, existing AuditStamp
-    doesNot: remove original
 }
 
 Feature DownloadFile {
@@ -187,16 +180,15 @@ La función `Safe` del Hosting traduce `FileNotFoundException` a 404, `ArgumentE
 
 **Observación de implementación:** `SqlFolderRepository.UpdateAsync` utiliza transacción SQL Server, revisión optimista y reemplaza la colección de filas de archivos. Esa implementación evita pérdidas silenciosas frente a revisiones obsoletas, pero puede reescribir muchos bytes al añadir/quitar un archivo. No constituye una razón para cambiar el modelo semántico.
 
-## 6. Pruebas de comportamiento derivadas de los contratos
+## 6. Pruebas de comportamiento relevantes para el Product
 
 | Caso | Comportamiento esperado | Evidencia actual |
 | --- | --- | --- |
 | Añadir a carpeta vacía | Se crea un archivo y queda visible en lectura | `AddFile_persists_file_content_and_audit` |
-| Copiar archivo | ID nuevo, mismo nombre/contenido/auditoría | `CopyFile_generates_new_id_but_preserves_name_content_and_audit` |
 | Descargar | Devuelve bytes del archivo seleccionado sin escribir | `DownloadFile_reads_selected_file_without_writing` |
 | Consultar metadatos | No incluye bytes y exige carpeta correcta | `Read_metadata_retains_original_file_name_type_size_without_exposing_bytes` |
 | Retirar | El archivo deja de existir en la carpeta | `RemoveFile_persists_removal` |
-| Operar sobre inexistente | Copy/Download/Remove fallan | `Missing_file_fails_copy_download_and_remove_without_changing_folders` |
+| Operar sobre inexistente | Download/Remove fallan; la prueba existente también cubre Copy, fuera del alcance seleccionado | `Missing_file_fails_copy_download_and_remove_without_changing_folders` |
 | Actualizar Point obsoleto | No se pierden archivos existentes | `Stale_aggregate_update_is_rejected_instead_of_losing_files` |
 | Archivo inmutable | Los bytes se copian defensivamente; tamaño derivado | `File_content_is_defensively_copied_and_size_is_derived` |
 | Persistencia SQL real | Archivo sobrevive recreación de repositorio | `Uploaded_file_survives_repository_recreation_with_bytes_and_audit` (Testcontainers, opt-in) |
@@ -237,10 +229,10 @@ case ReadRegisteredAttachment {
 **Acordado:**
 - Folder Service sigue siendo genérico y privado.
 - `FolderPath` identifica estructuralmente una carpeta.
-- `AttachedFileId` identifica un archivo; `CopyFile` genera una identidad diferente.
+- `AttachedFileId` identifica un archivo. No modelamos `CopyFile` porque el Product actual no la consume.
 - Los metadatos se proyectan en Folder Service, sin cargar bytes.
 - Ticket Support Product/BFF verifica pertenencia y autorización antes de leer/descargar.
-- Solo asociar archivos durante el registro de Ticket v2; las Features genéricas de retirada/copia se conservan pero no se publican como edición del Ticket.
+- Solo asociar archivos durante el registro de Ticket v2; `RemoveFile` se conserva para compatibilidad/limpieza, pero no se publica como edición del Ticket. `CopyFile` queda fuera del modelo de la PoC.
 
 **Por examinar (sin bloquear la definición semántica):**
 1. Forma exacta de `FolderFileReference` para el Ticket: referencia opaca y coordenadas necesarias para localizar el archivo sin adivinar la carpeta.
@@ -250,4 +242,4 @@ case ReadRegisteredAttachment {
 5. Evidencia E2E de Hosting + SQL Server + BFF; pruebas SQL opt-in y autenticación definitiva no se presuponen.
 6. Posibilidad de optimizar la persistencia sin reescribir todos los archivos; **no forma parte de la PoC del 13**.
 
-**No implementado en este documento:** migración al nuevo VSlices Framework, cambios al repositorio propietario, despliegue, nuevas Features y pruebas ejecutadas localmente. Este modelo sirve como base para decidir el próximo incremento concreto con el código real, preservando su procedencia.
+**No implementado en este documento:** migración al nuevo VSlices Framework, cambios al repositorio propietario, despliegue, nuevas Features y pruebas ejecutadas localmente. Este modelo está limitado deliberadamente a **cuatro Features consumidas por el Product actual**, sin trasladar automáticamente sus operaciones de edición de adjuntos al nuevo Ticket v2. Sirve como base para el siguiente incremento concreto con el código real, preservando su procedencia.
