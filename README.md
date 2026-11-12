@@ -2,13 +2,13 @@
 
 **Estado:** pseudocódigo de diseño, no código ejecutable ni contrato implementado. Primera iteración: 2026-11-12.
 
-Este repositorio es el **cuaderno de realización** de dos servicios basados en [template-service v0.1.1](https://github.com/atom-dev-serviu/template-service/tree/v0.1.1). No sustituye la documentación propietaria del caso Serviu, no constituye una especificación normativa de VSlices y no presupone un motor de procesos configurable.
+Este repositorio es el **cuaderno de modelado y composición** de los servicios y el Product de Ticket Support, considerando [template-service v0.1.1](https://github.com/atom-dev-serviu/template-service/tree/v0.1.1). No sustituye la documentación propietaria del caso Serviu, no constituye una especificación normativa de VSlices y no presupone un motor de procesos configurable.
 
 ## Recorrido
 
 1. [Ticket Service v2 — Spaces y Features](ticket-service-v2.md).
 2. [Flow Orchestration Service — Spaces y Features](flow-orchestration-service.md).
-3. [Contrato entre ambos — decisiones y preguntas](integration-contract.md).
+3. [Contrato transversal del Ticket Support Product — conexiones, coordinación y decisiones](integration-contract.md).
 4. [Folder Service — estado actual y preparación de integración](folder-service.md).
 5. [Ticket Support Product / BFF — composición y Features](ticket-support-bff.md).
 
