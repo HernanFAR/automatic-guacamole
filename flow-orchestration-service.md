@@ -46,6 +46,7 @@ Space FlowSpecificationVersion {
     specification: FlowSpecificationId
     version: FlowVersion
     compatibleElementTypes: Set<ElementType>
+    instancePolicy: InstancePolicy            // criterio de admisión al iniciar ejecuciones
     initialState: FlowState
     states: Set<FlowState>
 
@@ -54,6 +55,12 @@ Space FlowSpecificationVersion {
     invariant: a published version retains its original semantics
     transitions: Derived<Set<ConditionalTransitionId>>
 }
+
+// La política se define por versión y se evalúa sobre las instancias existentes.
+// En TicketSupport/V1: una sola ejecución por Ticket, sin reiniciar tras cierre.
+Choice InstancePolicy =
+    "SingleInstancePerSubjectAcrossVersions" // caso adoptado para Tickets
+    // Otras políticas quedan por descubrir cuando haya un caso real.
 
 Space ConditionalTransition {
     id: ConditionalTransitionId
@@ -84,6 +91,7 @@ const FlowSpecificationVersion TicketSupportV1 {
     specification: TicketSupportSpecificationId
     version: "V1"
     compatibleElementTypes: { "Ticket" }
+    instancePolicy: "SingleInstancePerSubjectAcrossVersions"
     initialState: "Evaluación"
     states: { "Evaluación", "Aprobación", "Supervisión", "Cerrado" }
 }
@@ -121,6 +129,8 @@ constant TicketSupportV1.TerminalStates = { "Cerrado" }
 
 Los nombres de los identificadores de constantes sirven de notación, no representan valores concretos aprobados.
 
+**Alcance de la política de Tickets:** `SingleInstancePerSubjectAcrossVersions` compara el Ticket por su identidad externa, no solo por `(Ticket, FlowSpecificationVersionId)`. Por ello una instancia V1 existente, incluso terminada, impide iniciar otra para el mismo Ticket con una versión posterior. Esto es una decisión del flujo Tickets, no una regla global para todos los tipos de elementos; la forma de imponerla de manera atómica ante concurrencia queda para la realización.
+
 ## 2. Instancia e historia de ejecución
 
 ```pseudo
@@ -131,6 +141,7 @@ Space FlowInstance {
     currentState: FlowState
 
     requires: subject.elementType in specificationVersion.compatibleElementTypes
+    requires: specificationVersion.instancePolicy admits a new instance for subject
     invariant: specificationVersion and subject do not change across Points
     invariant: currentState belongs to specificationVersion.states
     invariant: currentState evolves only through an eligible ConditionalTransition
@@ -255,13 +266,15 @@ Feature StartFlow {
         specificationVersion exists among recognized constant versions
         && subject.elementType in specificationVersion.compatibleElementTypes
         && referenced element exists (verified by appropriate owner)
-        && duplicate/uniqueness policy for instances is resolved
+        && InstanceAdmission(specificationVersion.instancePolicy, subject, existingInstances)
+        && atomic uniqueness enforcement succeeds
     writes: FlowInstance(
         specificationVersion,
         subject,
         currentState=specificationVersion.initialState
     )
     guarantees: instance is bound to the selected version
+    guarantees: TicketSupport/V1 never creates a second FlowInstance for the same Ticket
     note: starting is not a transition between two existing states
 }
 
