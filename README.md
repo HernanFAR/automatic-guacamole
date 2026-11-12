@@ -19,7 +19,7 @@ Este repositorio es el **cuaderno de realización** de dos servicios basados en 
 - Los Points son inmutables. Evolución de un informe borrador e iteración de una instancia de flujo producen nuevos Points, no mutaciones del Point anterior.
 - Guardar un borrador **no avanza el flujo**. Formalizar datos en Ticket Service y ejecutar una transición de Flow Orchestration son responsabilidades distintas.
 - No recuperar las Features descartadas de **edición de Ticket** ni **asignación de responsable**; tampoco introducir edición posterior de adjuntos. Conservar asociación de evidencias durante registro.
-- **FlowSpecification** es el Space principal del orquestador; **FlowInstance** es el de mayor uso y ejecuta una versión compatible con el tipo de elemento. No añadir editor de estados, gestión dinámica de definiciones ni un motor genérico sin necesidad comprobada.
+- **FlowSpecification** es el Space principal del orquestador; **FlowInstance** es el de mayor uso y ejecuta una versión compatible con el tipo de elemento. La política de admisión de instancias se define en `FlowSpecificationVersion`; en `TicketSupport/V1`, cada Ticket admite **una única FlowInstance**, incluso tras finalizar y sin duplicados por cambio de versión. No añadir editor de estados, gestión dinámica de definiciones ni un motor genérico sin necesidad comprobada.
 
 ## Convención de referencias
 
