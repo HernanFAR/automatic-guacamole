@@ -109,59 +109,165 @@ La referencia manual debe seguir disponible incluso en sistemas integrados. La c
 
 ## 3. Catálogos propios de Tickets
 
-### 3.1 Sistema
+**Acuerdo 2026-11-12:** los tres nombres tienen máximo 50 caracteres y unicidad contextual. Los cambios de nombre y actividad admiten nuevos Points de la misma identidad. La unidad de unicidad de `System` es todo su catálogo; la de `Module` y `IncidenceType` es el `System` asociado.
+
+### 3.1 Características compartidas
 
 ```pseudo
+Choice Activity = "Activo" | "Desactivado"
 Choice IntegrationCondition = "Integrated" | "NonIntegrated"
 
+// No crea otro Space. Es una característica de cada catálogo.
+// Todo Point es inmutable: editar / cambiar actividad produce otro Point.
+Value CatalogueName = Text(nonEmpty=true, max=50)
+
+// Unicidad de nombres (acordada):
+Unique(System.name)                        // catálogo completo de Sistemas
+Unique(Module.system, Module.name)         // cada Sistema por separado
+Unique(IncidenceType.system, IncidenceType.name)
+
+// Por definir: si unicidad ignora mayúsculas, espacios, acentos;
+// y si elementos desactivados reservan sus nombres.
+// La unicidad es regla del conjunto de Points vigentes, no del valor Text aislado.
+```
+
+**Actividad:** una característica que identifica si un elemento está activo o desactivado, no una propiedad de su identidad. Su representación concreta puede ser `Choice` o equivalente, sin requerir un nuevo Space; todavía se deben acordar estado inicial y tratamiento de la operación Activar.
+
+### 3.2 System
+
+```pseudo
 Space System {
     id: SystemId
+    name: CatalogueName                // único entre todos los System
     integration: IntegrationCondition
-    // Además: nombre/identificación visible y actividad se observan en UI,
-    // pero las reglas de nombre, identidad y evolución NO están acordadas.
-    displayName: PendingRule("denominación, obligatoriedad y longitud")
-    activity: PendingRule("vigencia y reglas para consulta/mantenimiento")
+    activity: Activity                 // nuevos Points para cambios admitidos
 
     modules: Derived<Sequence<Reference<Module>>>
     incidenceTypes: Derived<Sequence<Reference<IncidenceType>>>
-    // No decidir aún si relaciones anteriores se almacenan o se calculan.
+    // Por decidir si ambas relaciones se almacenan o se consultan.
+
+    invariant: id does not vary within the same System
+    invariant: integration does not change through rename/activate/deactivate
+    invariant: name is unique within the System catalogue
 
     rule: createdThroughMaintainer => integration == "NonIntegrated"
-    rule: "Integrated" => incorporatedByServiuTeamByDefault
-    note: integración no significa pertenencia del software a Serviu.
+    rule: integration == "Integrated" => provisionedByServiuTeam
+    initiallyIntegrated: ["ServiuPro - Soporte"]
 }
 ```
 
-Ejemplos reconocidos como integrados previstos: ServiuPRO IdP, Pagos, PAVES y Refrendación. No asumir que sus integraciones o consultas ya existan.
+**Único System integrado inicial:** `"ServiuPro - Soporte"`. Los anteriores ejemplos de IdP, Pagos, PAVES y Refrendación **no** se incorporan como integrados en esta versión.
 
-### 3.2 Módulo de Sistema
+### 3.3 Module
 
 ```pseudo
 Space Module {
     id: ModuleId
-    name: Text                           // máximo y unicidad por definir
+    name: CatalogueName
     system: Reference<System>
-    active: PendingRule("actividad observada en selector, no aprobada como invariante")
-    evolution: PendingRule("identidad, edición y vigencia")
+    activity: Activity
 
-    invariant: module belongs to its associated System
+    invariant: id and system do not change across Points
+    invariant: name unique within referenced System
+    // Módulos de Systems distintos sí pueden compartir nombre.
 }
 ```
 
-### 3.3 Tipo de incidencia
+**Crear Module** requiere nombre y referencia a un System relacionado. Queda pendiente confirmar si la creación exige que ese System esté activo; no introducir una regla implícita.
+
+### 3.4 IncidenceType
 
 ```pseudo
 Space IncidenceType {
     id: IncidenceTypeId
-    name: Text                           // máximo y unicidad por definir
+    name: CatalogueName
     system: Reference<System>
-    active: PendingRule("actividad observada, reglas por contrastar")
-    evolution: PendingRule("identidad, edición y vigencia")
-    note: no está acreditada dependencia adicional respecto de Module.
+    activity: Activity
+
+    invariant: id and system do not change across Points
+    invariant: name unique within referenced System
+    // IncidenceTypes de Systems distintos pueden compartir nombre.
+    // No se declara relación obligatoria con Module.
 }
 ```
 
-El formulario muestra módulos y tipos de incidencia según el Sistema seleccionado y ofrece activos. Eso **no prueba por sí solo** qué política de mantenimiento o invariancia debe adoptar el dominio. La referencia del Ticket a Módulo y Tipo de incidencia debe corresponder a su Sistema; las reglas precisas de validación histórica quedan por contrastar.
+### 3.5 Features de mantenimiento: reglas por catálogo
+
+```pseudo
+Feature CreateSystem {
+    input: name: CatalogueName
+    requires: no System with conflicting name
+    writes: System(name, integration="NonIntegrated", activity=PendingInitialActivity)
+    // Los Systems Integrated no se crean mediante este mantenedor.
+}
+
+Feature EditSystem {
+    input: SystemId + newName: CatalogueName
+    requires: System exists by ID
+              && System.activity == "Activo"
+              && newName unique in System catalogue
+    writes: new Point with same ID, IntegrationCondition and Activity; new Name only
+}
+
+Feature CreateModule {
+    input: system: Reference<System> + name: CatalogueName
+    requires: related System exists
+              && name unique among Module of that System
+    writes: Module(system, name, activity=PendingInitialActivity)
+}
+Feature EditModule {
+    input: ModuleId + newName: CatalogueName
+    requires: Module exists by ID
+              && Module.activity == "Activo"
+              && newName unique among Modules of same System
+    writes: new Point with same ID, same System, same Activity; new Name only
+}
+
+Feature CreateIncidenceType {
+    input: system: Reference<System> + name: CatalogueName
+    requires: related System exists
+              && name unique among IncidenceType of that System
+    writes: IncidenceType(system, name, activity=PendingInitialActivity)
+}
+Feature EditIncidenceType {
+    input: IncidenceTypeId + newName: CatalogueName
+    requires: IncidenceType exists by ID
+              && IncidenceType.activity == "Activo"
+              && newName unique among IncidenceType of same System
+    writes: new Point with same ID, same System, same Activity; new Name only
+}
+```
+
+**Para cada catálogo (`System`, `Module`, `IncidenceType`)** existen dos Features de cambio de actividad. Se expresan paramétricamente para no repetir reglas idénticas sin confundir su propiedad:
+
+```pseudo
+Feature Activate<Catalogue> {
+    input: Id<Catalogue>
+    requires: exists by ID
+    requires: PENDING_CONTRADICTION(
+        "La indicación literal fue: si está desactivado => error.",
+        "Pero ello haría imposible activar un elemento desactivado."
+    )
+    writes: new Point(activity="Activo") ONLY IF transition is approved
+}
+
+Feature Deactivate<Catalogue> {
+    input: Id<Catalogue>
+    requires: exists by ID && current.activity == "Activo"
+    rejects: missing ID; current.activity == "Desactivado"
+    writes: new Point(activity="Desactivado"), same identity and other characteristics
+}
+
+CandidateActivationRule {
+    // Candidata, NO aprobada:
+    "Desactivado" -> "Activo"    // permitido
+    "Activo" -> "Activo"        // error: ya activo
+}
+```
+
+**Reglas de error verificadas contra la descripción:** editar y desactivar requieren identidad existente y actividad `"Activo"`. En cualquiera de los catálogos, ID inexistente produce error. La operación **Activar requiere confirmar el tratamiento del estado actual** debido a la contradicción indicada; hasta entonces no declarar su comportamiento como terminado.
+
+**Pendientes que sí importan:** estado inicial de actividad al crear; criterio de comparación de nombres y reserva de nombres desactivados; posibilidad de activar/desactivar módulos o incidencias cuando su System esté desactivado; precondición de actividad del System al crear Module/IncidenceType. Ninguno se deduce de la UI.
 
 ## 4. Ticket y adjuntos
 
@@ -402,18 +508,9 @@ Feature RecordSupervision {
     doesNot: close the machine
 }
 
-Feature MaintainSystem {
-    operations: create, edit, activate/deactivate // actual intent to contrast
-    owner: TicketService
-}
-Feature MaintainModule {
-    operations: create, edit, activate/deactivate // actual intent to contrast
-    owner: TicketService
-}
-Feature MaintainIncidenceType {
-    operations: create, edit, activate/deactivate // actual intent to contrast
-    owner: TicketService
-}
+// Las Features de catálogos se definen con contratos y errores en §3.5.
+// Create/Edit son específicas de System, Module e IncidenceType.
+// Activate/Deactivate comparten el esquema, pero no su identidad funcional.
 ```
 
 Los mantenedores se describen como candidatos funcionales; **no se interpretan las operaciones agrupadas como firmas aprobadas de una Feature**. Las reglas organizacionales de creación, modificación y vigencia todavía deben profundizarse.
@@ -425,7 +522,7 @@ Los mantenedores se describen como candidatos funcionales; **no se interpretan l
 3. **Completitud de supervisión:** determinar cuándo `SupervisionCompletion` es verdadero; no confundir guardado con completitud.
 4. **Normalización de cierre:** reconciliar etiquetas de formulario e interfaz de proyección mediante decisión expresa.
 5. **Referencias a elementos externos:** precisar identidades, tipos y permisos sin asumir que los sistemas externos están integrados.
-6. **Catálogos:** verificar identidad, vigencia y cambios admisibles contra los mantenedores reales; no inventar reglas de unicidad.
+6. **Catálogos:** unicidad y operaciones ya acordadas en §3; confirmar actividad inicial, normalización de nombres, reserva de nombres desactivados y contradicción en Activar.
 7. **Datos contextuales de proyecto:** precisar ubicación de código y nombre de proyecto en el modelo.
 8. **Compatibilidad:** definir pruebas de equivalencia semántica para reemplazar `ticket-service` por `ticket-service-v2`.
 9. **Coordinación:** formalización de informes y avance de Flow Orchestration siguen siendo escrituras separadas cuyo protocolo no está decidido.
