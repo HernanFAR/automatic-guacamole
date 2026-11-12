@@ -10,6 +10,7 @@ Este repositorio es el **cuaderno de realización** de dos servicios basados en 
 2. [Flow Orchestration Service — Spaces y Features](flow-orchestration-service.md).
 3. [Contrato entre ambos — decisiones y preguntas](integration-contract.md).
 4. [Folder Service — estado actual y preparación de integración](folder-service.md).
+5. [Ticket Support Product / BFF — composición y Features](ticket-support-bff.md).
 
 ## Decisiones establecidas
 
