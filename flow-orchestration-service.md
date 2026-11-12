@@ -56,24 +56,60 @@ Space ExecutedTransition {
 
 La definición `(kind, version) -> transition rules` existe como **conjunto de constantes**. No hay `FlowDefinition` persistido inicialmente; si alguna vez necesitamos V2, debe conservarse la interpretación de las instancias V1.
 
-## 3. Proyección externa para las condiciones
+## 3. Proyección de Ticket propietaria de Flow Orchestration
+
+**Responsabilidad:** Flow Orchestration **define, construye y consume** la proyección `TicketFlowFacts` para evaluar las condiciones de transición. Su propietario de definición y consulta es el orquestador; **los datos fuente siguen perteneciendo a Ticket Service v2**.
 
 ```pseudo
+Choice EvaluationScope = "Soporte" | "Mejora"
+Choice ProjectedClosureState = "Sin cierre" | "Cerrada" | "Con observaciones"
+
 Projection TicketFlowFacts {
     evaluationCompleted: Bool
-    evaluationScope: Optional<Choice<"Soporte", "Mejora">>
+    evaluationScope: Optional<EvaluationScope>
     approvalCompleted: Bool
     supervisionCompleted: Bool
-    closureState: Optional<Choice<"Sin cierre", "Cerrada", "Con observaciones">>
+    closureState: Optional<ProjectedClosureState>
 
     valid: !evaluationCompleted => evaluationScope == None
     valid:  evaluationCompleted => evaluationScope is Some
     valid: !supervisionCompleted => closureState == None
     valid:  supervisionCompleted => closureState is Some
 }
+
+// Propiedad de lectura: Flow Orchestration.
+// Fuentes: informes de evaluación, aprobación y supervisión de Ticket Service.
+Query ReadTicketFlowFacts(ticket: TicketReference) -> Fin<TicketFlowFacts> {
+    source: read-only JOIN/view of Ticket Service-owned tables
+    doesNot: write Ticket data or duplicate report persistence
+}
+
+derive evaluationCompleted =
+    current EvaluationReport is CompletedEvaluationReport
+
+derive approvalCompleted =
+    current ApprovalReport is CompletedApprovalReport
+
+derive supervisionCompleted =
+    current SupervisionReport is CompletedSupervisionReport
+
+derive evaluationScope = match current EvaluationReport {
+    CompletedEvaluationReport completed => Some(completed.scope)
+    otherwise => None
+}
+
+derive closureState = match current SupervisionReport {
+    CompletedSupervisionReport completed
+        => Some(ExplicitClosureMapping(completed.closure))
+    otherwise => None
+}
 ```
 
-No es agregado persistido ni Space propietario de Flow Orchestration. La lectura se obtiene mediante JOIN/vista SQL sobre Ticket Service. La implementación de esa consulta y garantías de concurrencia quedan pendientes.
+`EvaluationReport`, `ApprovalReport` y `SupervisionReport` son **Spaces externos** para el orquestador; el pseudocódigo de la consulta describe cómo interpretar sus datos persistidos, no incorpora sus Spaces al modelo propietario del flujo. [Las variantes y características están definidas en Ticket Service v2](ticket-service-v2.md#5-informe-de-evaluación--unión-discriminada).
+
+**Límites explícitos:** la derivación de `supervisionCompleted` depende de aprobar el criterio para producir `CompletedSupervisionReport`. El formulario de Ticket Service documenta `"Sin Cierre" | "Cerrado" | "Con observaciones"`, mientras que el contrato proyectado requiere `"Sin cierre" | "Cerrada" | "Con observaciones"`: el mapeo exacto sigue abierto y no debe implementarse silenciosamente. Las garantías de consistencia/concurrencia de lecturas y transiciones también están por definir.
+
+`TicketFlowFacts` es una **proyección calculada de solo lectura**, no un agregado persistido, ni un nuevo Space con identidad independiente. Se mantiene exactamente en cinco características; no se agregan antecedentes del Ticket que no participen en condiciones.
 
 ## 4. Función pura de transiciones admisibles
 

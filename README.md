@@ -15,7 +15,7 @@ Este repositorio es el **cuaderno de realización** de dos servicios basados en 
 - `ticket-service-v2` posee el Ticket **inalterable tras el registro**, los informes únicos por Ticket y sus reglas de validez/formalización, referencias de evidencias y catálogos de clasificación.
 - `flow-orchestration-service` posee **identidad, versión, estado y trayectoria** de cada máquina de estados. No escribe informes ni Tickets.
 - El primer flujo de Tickets se define **solo mediante constantes**, identificado por `TicketSupport / V1`: `Evaluación | Aprobación | Supervisión | Cerrado`.
-- El orquestador decide la habilitación usando una **proyección de lectura con cinco características**: evaluación completada, alcance, aprobación completada, supervisión completada y estado de cierre. El alcance y cierre solo están presentes tras completar sus respectivos informes.
+- El orquestador **es propietario de la definición y consulta** de una **proyección de lectura con cinco características**, obtenida sobre tablas de Ticket Service v2 sin escribirlas ni replicarlas: evaluación completada, alcance, aprobación completada, supervisión completada y estado de cierre. El alcance y cierre solo están presentes tras completar sus respectivos informes.
 - Los Points son inmutables. Evolución de un informe borrador e iteración de una instancia de flujo producen nuevos Points, no mutaciones del Point anterior.
 - Guardar un borrador **no avanza el flujo**. Formalizar datos en Ticket Service y ejecutar una transición de Flow Orchestration son responsabilidades distintas.
 - No recuperar las Features descartadas de **edición de Ticket** ni **asignación de responsable**; tampoco introducir edición posterior de adjuntos. Conservar asociación de evidencias durante registro.

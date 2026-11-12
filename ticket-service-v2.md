@@ -501,41 +501,13 @@ Esta transformación **no presupone** que solo `"Cerrado"` puede formar un Compl
 
 **Discrepancia de vocabulario:** formulario `"Sin Cierre" | "Cerrado" | "Con observaciones"` frente a proyección `"Sin cierre" | "Cerrada" | "Con observaciones"`. Requiere mapeo explícito antes de implementar.
 
-## 8. Proyección de solo lectura para Flow Orchestration
+## 8. Contrato de lectura consumido por Flow Orchestration
 
-La proyección permanece en **cinco características**, sin nueva persistencia. La discriminación de variantes permite expresar completitud sin flags independientes en los informes.
+**La definición y realización de `TicketFlowFacts` pertenecen a [Flow Orchestration Service](flow-orchestration-service.md#3-proyección-de-ticket-propietaria-de-flow-orchestration).** Este Service solo posee Ticket y sus informes (incluidas las variantes Draft/Completed). No crea, conserva ni expone como responsabilidad propia una proyección específica del orquestador.
 
-```pseudo
-Choice ProjectedClosureState = "Sin cierre" | "Cerrada" | "Con observaciones"
+Flow Orchestration consulta **directamente, en modo de solo lectura**, las tablas propietarias de Ticket Service mediante JOIN/vista SQL y construye sus cinco hechos a partir de los informes. No necesita escribir ni duplicar los datos de Ticket.
 
-Projection TicketFlowFacts {
-    evaluationCompleted: Bool
-    evaluationScope: Optional<EvaluationScope>
-    approvalCompleted: Bool
-    supervisionCompleted: Bool
-    closureState: Optional<ProjectedClosureState>
-
-    invariant: !evaluationCompleted => evaluationScope == None
-    invariant:  evaluationCompleted => evaluationScope is Some
-    invariant: !supervisionCompleted => closureState == None
-    invariant:  supervisionCompleted => closureState is Some
-}
-
-derive evaluationCompleted = current EvaluationReport is CompletedEvaluationReport
-derive approvalCompleted = current ApprovalReport is CompletedApprovalReport
-derive supervisionCompleted = current SupervisionReport is CompletedSupervisionReport
-derive evaluationScope = match current EvaluationReport {
-    CompletedEvaluationReport completed => Some(completed.scope)
-    otherwise => None
-}
-derive closureState = match current SupervisionReport {
-    CompletedSupervisionReport completed
-        => Some(ExplicitClosureMapping(completed.closure))
-    otherwise => None
-}
-```
-
-La derivación de `supervisionCompleted` es **coherente dentro del modelo de variantes propuesto**, pero depende de que definamos cuándo está permitido construir un `CompletedSupervisionReport`. No afirmamos que el legacy ya lo haga. El mapeo de constantes de cierre también permanece pendiente de decisión.
+La formalización de cada informe sigue siendo una responsabilidad de Ticket Service v2. El criterio organizacional de completar supervisión y el mapeo de valores de cierre siguen pendientes de acuerdo.
 
 ## 9. Features candidatas — Ticket Service v2
 
