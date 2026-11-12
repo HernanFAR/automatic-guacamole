@@ -367,9 +367,9 @@ Space DraftEvaluationReport extends EvaluationReport {
     supportLevel: Optional<SupportLevel>
     supportEntryDate: Optional<Date(<= today)>
     scope: Optional<EvaluationScope>
-    actionDescription: Optional<Text(max=500)>
-    proposedSolution: Optional<Text(max=1000)>
-    expectedSolutionTime: Optional<Text(max=100)>
+    actionDescription: Text(min=0, max=500)
+    proposedSolution: Text(min=0, max=1000)
+    expectedSolutionTime: Text(min=0, max=100)
     incidentSolution: Optional<IncidentSolution>
     activityStartDate: Optional<Date>
     activityEndDate: Optional<Date>
@@ -383,9 +383,9 @@ Space CompletedEvaluationReport extends EvaluationReport {
     supportLevel: SupportLevel
     supportEntryDate: Date(<= today)
     scope: EvaluationScope
-    actionDescription: Text(max=500)
-    proposedSolution: Text(max=1000)
-    expectedSolutionTime: Text(max=100)
+    actionDescription: Text(min=1, max=500)
+    proposedSolution: Text(min=1, max=1000)
+    expectedSolutionTime: Text(min=1, max=100)
     incidentSolution: IncidentSolution
     activityStartDate: Date
     activityEndDate: Date
@@ -401,13 +401,13 @@ Transform CompleteEvaluation(draft: DraftEvaluationReport)
 }
 ```
 
-Los campos opcionales del borrador permiten capturas parciales; la variante completada exige las diez características. Los **Points de ambas variantes son siempre inmutables**: que el borrador sea evolucionable no significa que sus propiedades se muten.
+Las selecciones y fechas opcionales del borrador, junto con los textos `min=0`, permiten capturas parciales; la variante completada exige las diez características. Los **Points de ambas variantes son siempre inmutables**: que el borrador sea evolucionable no significa que sus propiedades se muten.
 
 **Preguntas preservadas:** justificación de fecha de ingreso, procedencia de acción/propuesta y pertinencia de «¿Se solucionó el incidente?» en evaluación. Los máximos 500/1.000/100 están acordados para el modelo, no verificados en el servicio legado.
 
 ## 6. Informe de aprobación — unión discriminada
 
-Un único informe lógico por Ticket, ahora expresado como **`ApprovalReport = DraftApprovalReport | CompletedApprovalReport`**. Tres características son obligatorias al completar; las otras dos **siguen siendo legítimamente opcionales**, incluso en la variante completada.
+Un único informe lógico por Ticket, ahora expresado como **`ApprovalReport = DraftApprovalReport | CompletedApprovalReport`**. Tres características son obligatorias al completar; fecha y observación **siguen siendo legítimamente opcionales**, incluso en la variante completada. Para textos sin contenido, se utiliza `Text(min=0)` en vez de `Optional<Text>`.
 
 ```pseudo
 Choice ApprovalSatisfaction = "Sí" | "No" | "En Proceso" | "Otro"
@@ -424,9 +424,9 @@ Space ApprovalReport {
 Space DraftApprovalReport extends ApprovalReport {
     satisfaction: Optional<ApprovalSatisfaction>
     observationDate: Optional<Date>
-    observation: Optional<Text>                   // máximo pendiente
+    observation: Text(min=0, max=1000)
     indication: Optional<ApprovalIndication>
-    indicationDetail: Optional<Text(nonEmpty=true)> // máximo pendiente
+    indicationDetail: Text(min=0, max=1000)
 
     evolution: Draft -> Draft (new immutable Point)
 }
@@ -434,9 +434,9 @@ Space DraftApprovalReport extends ApprovalReport {
 Space CompletedApprovalReport extends ApprovalReport {
     satisfaction: ApprovalSatisfaction
     observationDate: Optional<Date>               // sigue siendo opcional
-    observation: Optional<Text>                   // sigue siendo opcional
+    observation: Text(min=0, max=1000)          // sigue siendo opcional
     indication: ApprovalIndication
-    indicationDetail: Text(nonEmpty=true)
+    indicationDetail: Text(min=1, max=1000)
 
     evolution: none
 }
@@ -448,11 +448,13 @@ Transform CompleteApproval(draft: DraftApprovalReport)
 }
 ```
 
+**Límites acordados (2026-11-12):** `observation` tiene máximo 1.000 caracteres; `indicationDetail` tiene máximo 1.000. La variante completada exige contenido significativo en `indicationDetail` (los espacios en blanco por sí solos no cuentan).
+
 **No inferir** rutas de rechazo o devolución de las opciones `"No"` o `"En Proceso"`. Falta contrastar el significado organizacional de una aprobación válida; la condición de Flow Orchestration V1 observa únicamente que exista la variante Completed.
 
 ## 7. Informe de supervisión — unión discriminada candidata
 
-Aplicamos también el patrón **`SupervisionReport = DraftSupervisionReport | CompletedSupervisionReport`**. Conservamos los tres campos del modelo observado; las observaciones son **opcionales en ambas variantes**.
+Aplicamos también el patrón **`SupervisionReport = DraftSupervisionReport | CompletedSupervisionReport`**. Conservamos los tres campos del modelo observado; las observaciones son **opcionales en ambas variantes** y se representan mediante `Text(min=0, max=2000)`.
 
 **Límite importante:** que un informe posea estado de cierre `"Cerrado"` no es lo mismo que declarar la variante `Completed`. La nueva distinción de completitud está propuesta para nuestro diseño; **aún debe contrastarse con los seguimientos sucesivos del legacy** y con el acto organizacional de completar supervisión. No convertir todo guardado en una formalización automática.
 
@@ -472,7 +474,7 @@ Space SupervisionReport {
 Space DraftSupervisionReport extends SupervisionReport {
     closure: Optional<ReportClosureState>
     paymentRegularization: Optional<OutOfSystemPaymentRegularization>
-    monitoringObservations: Optional<Text(nonEmpty=true)> // máximo pendiente
+    monitoringObservations: Text(min=0, max=2000)
 
     evolution: Draft -> Draft (new immutable Point; repeated monitoring to examine)
 }
@@ -480,7 +482,7 @@ Space DraftSupervisionReport extends SupervisionReport {
 Space CompletedSupervisionReport extends SupervisionReport {
     closure: ReportClosureState
     paymentRegularization: OutOfSystemPaymentRegularization
-    monitoringObservations: Optional<Text(nonEmpty=true)> // legítimamente opcional
+    monitoringObservations: Text(min=0, max=2000) // legítimamente opcional
 
     evolution: none // mismo patrón de variante definitiva; verificar contra negocio
 }
@@ -494,6 +496,8 @@ Transform CompleteSupervision(draft: DraftSupervisionReport)
 ```
 
 Esta transformación **no presupone** que solo `"Cerrado"` puede formar un Completed; la proyección acordada contempla `"Sin cierre"`, `"Cerrada"` y `"Con observaciones"` cuando `supervisionCompleted=true`. El criterio de completar, su relación con seguimientos sucesivos y la restricción de evolución posterior requieren validación; no presentamos este modelo candidato como comportamiento legacy comprobado.
+
+**Límite acordado (2026-11-12):** `monitoringObservations` admite hasta 2.000 caracteres y puede estar vacío. Esta longitud corresponde al campo del informe actual; todavía falta decidir cómo representar múltiples seguimientos históricos, sin concatenarlos automáticamente.
 
 **Discrepancia de vocabulario:** formulario `"Sin Cierre" | "Cerrado" | "Con observaciones"` frente a proyección `"Sin cierre" | "Cerrada" | "Con observaciones"`. Requiere mapeo explícito antes de implementar.
 
