@@ -147,7 +147,7 @@ Unique(IncidenceType.system, IncidenceType.name.semanticKey)
 
 **Nombre normalizado:** concepto de valor reutilizable para toda característica que funcione como nombre identificativo, clave de unicidad o criterio de búsqueda por nombre. Las Features no comparan texto bruto; comparan su equivalencia semántica normalizada. La normalización especificada hasta ahora elimina diferencias por capitalización y espacios exteriores. No presupone eliminar acentos ni modificar espacios interiores. Los nombres de elementos desactivados **siguen reservados** en su ámbito. El nombre visible y la clave semántica son dos representaciones del mismo valor, no dos Spaces de negocio.
 
-**ActivationStatus:** característica evolucionable que identifica si un elemento está activo o desactivado, sin cambiar su identidad. Se expresa mediante constantes, sin un nuevo Space. Queda por definir solo la estado inicial de activación de creación.
+**ActivationStatus:** característica evolucionable que identifica si un elemento está activo o desactivado, sin cambiar su identidad. Se expresa mediante constantes, sin un nuevo Space. Toda creación mediante las Features de mantenimiento comienza con `activationStatus = "Active"`.
 
 ### 3.2 System
 
@@ -209,11 +209,13 @@ Space IncidenceType {
 
 ### 3.5 Features de mantenimiento: reglas por catálogo
 
+**Regla acordada:** `CreateSystem`, `CreateModule` y `CreateIncidenceType` siempre generan inicialmente un Point con `ActivationStatus = "Active"`.
+
 ```pseudo
 Feature CreateSystem {
     input: name: CatalogueName
     requires: no System with same normalized name, including inactive
-    writes: System(name, integration="NonIntegrated", activationStatus=PendingInitialActivationStatus)
+    writes: System(name, integration="NonIntegrated", activationStatus="Active")
     // Los Systems Integrated no se crean mediante este mantenedor.
 }
 
@@ -229,7 +231,7 @@ Feature CreateModule {
     input: system: Reference<System> + name: CatalogueName
     requires: related System exists
               && normalized name unique among all Module of that System, including inactive
-    writes: Module(system, name, activationStatus=PendingInitialActivationStatus)
+    writes: Module(system, name, activationStatus="Active")
 }
 Feature EditModule {
     input: ModuleId + newName: CatalogueName
@@ -243,7 +245,7 @@ Feature CreateIncidenceType {
     input: system: Reference<System> + name: CatalogueName
     requires: related System exists
               && normalized name unique among all IncidenceType of that System, including inactive
-    writes: IncidenceType(system, name, activationStatus=PendingInitialActivationStatus)
+    writes: IncidenceType(system, name, activationStatus="Active")
 }
 Feature EditIncidenceType {
     input: IncidenceTypeId + newName: CatalogueName
@@ -281,7 +283,7 @@ ActivationStatusTransitionRules {
 
 **Reglas de error acordadas:** editar y desactivar requieren identidad existente y actividad `"Activo"`; activar requiere identidad existente y actividad `"Desactivado"`. ID inexistente siempre produce error. Activar algo ya activo y desactivar algo ya desactivado producen error. La errata anterior sobre Activar quedó expresamente corregida por Hernán.
 
-**Pendientes que sí importan:** estado inicial de activación al crear; equivalencia de acentos, normalización Unicode y espacios interiores; posibilidad de activar/desactivar módulos o incidencias cuando su System esté desactivado; precondición de estado de activación del System al crear Module/IncidenceType. Ninguno se deduce de la UI.
+**Pendientes que sí importan:** equivalencia de acentos, normalización Unicode y espacios interiores; posibilidad de activar/desactivar módulos o incidencias cuando su System esté desactivado; precondición de estado de activación del System al crear Module/IncidenceType. Ninguno se deduce de la UI.
 
 ### 3.6 Ejemplos de equivalencia para pruebas
 
