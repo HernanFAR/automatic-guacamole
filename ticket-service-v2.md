@@ -119,26 +119,42 @@ Choice IntegrationCondition = "Integrated" | "NonIntegrated"
 
 // No crea otro Space. Es una característica de cada catálogo.
 // Todo Point es inmutable: editar / cambiar actividad produce otro Point.
-Value CatalogueName = Text(nonEmpty=true, max=50)
+Value NormalizedName {
+    presented: Text(nonEmpty=true, max=50)
+    semanticKey: NormalizeName(presented)
 
-// Unicidad de nombres (acordada):
-Unique(System.name)                        // catálogo completo de Sistemas
-Unique(Module.system, Module.name)         // cada Sistema por separado
-Unique(IncidenceType.system, IncidenceType.name)
+    // Regla de equivalencia acordada:
+    // "Pagos" == "pagos " == "PAGOs"
+    // NormalizeName ignora mayúsculas/minúsculas y espacios exteriores.
+    // Una comparación para unicidad o búsqueda utiliza semanticKey.
+    invariant: NormalizeName(presented) is not empty
+    invariant: length(TrimOuterWhitespace(presented)) <= 50
+    note: preserve a readable presentation; do not require uppercase display.
+}
+Alias CatalogueName = NormalizedName
 
-// Por definir: si unicidad ignora mayúsculas, espacios, acentos;
-// y si elementos desactivados reservan sus nombres.
-// La unicidad es regla del conjunto de Points vigentes, no del valor Text aislado.
+// La unicidad se comprueba por clave semántica y alcance, sobre TODOS
+// los registros, incluidos los Desactivados:
+Unique(System.name.semanticKey)
+Unique(Module.system, Module.name.semanticKey)
+Unique(IncidenceType.system, IncidenceType.name.semanticKey)
+
+// El nombre de un elemento Desactivado continúa reservado.
+// La comparación exacta de acentos, Unicode y espacios interiores sigue abierta.
+// NormalizedName aplica también a otras características que se usen para
+// identidad o búsqueda por nombre: no es una restricción de cada Text descriptivo.
 ```
 
-**Actividad:** una característica que identifica si un elemento está activo o desactivado, no una propiedad de su identidad. Su representación concreta puede ser `Choice` o equivalente, sin requerir un nuevo Space; todavía se deben acordar estado inicial y tratamiento de la operación Activar.
+**Nombre normalizado:** concepto de valor reutilizable para toda característica que funcione como nombre identificativo, clave de unicidad o criterio de búsqueda por nombre. Las Features no comparan texto bruto; comparan su equivalencia semántica normalizada. La normalización especificada hasta ahora elimina diferencias por capitalización y espacios exteriores. No presupone eliminar acentos ni modificar espacios interiores. Los nombres de elementos desactivados **siguen reservados** en su ámbito. El nombre visible y la clave semántica son dos representaciones del mismo valor, no dos Spaces de negocio.
+
+**Actividad:** característica evolucionable que identifica si un elemento está activo o desactivado, sin cambiar su identidad. Se expresa mediante constantes, sin un nuevo Space. Queda por definir solo la actividad inicial de creación.
 
 ### 3.2 System
 
 ```pseudo
 Space System {
     id: SystemId
-    name: CatalogueName                // único entre todos los System
+    name: CatalogueName                // clave normalizada única, incluso desactivados
     integration: IntegrationCondition
     activity: Activity                 // nuevos Points para cambios admitidos
 
@@ -148,7 +164,7 @@ Space System {
 
     invariant: id does not vary within the same System
     invariant: integration does not change through rename/activate/deactivate
-    invariant: name is unique within the System catalogue
+    invariant: name.semanticKey is unique in the full System catalogue, including inactive
 
     rule: createdThroughMaintainer => integration == "NonIntegrated"
     rule: integration == "Integrated" => provisionedByServiuTeam
@@ -168,7 +184,7 @@ Space Module {
     activity: Activity
 
     invariant: id and system do not change across Points
-    invariant: name unique within referenced System
+    invariant: name.semanticKey unique within referenced System, including inactive
     // Módulos de Systems distintos sí pueden compartir nombre.
 }
 ```
@@ -196,7 +212,7 @@ Space IncidenceType {
 ```pseudo
 Feature CreateSystem {
     input: name: CatalogueName
-    requires: no System with conflicting name
+    requires: no System with same normalized name, including inactive
     writes: System(name, integration="NonIntegrated", activity=PendingInitialActivity)
     // Los Systems Integrated no se crean mediante este mantenedor.
 }
@@ -205,35 +221,35 @@ Feature EditSystem {
     input: SystemId + newName: CatalogueName
     requires: System exists by ID
               && System.activity == "Activo"
-              && newName unique in System catalogue
+              && newName normalized unique in System catalogue, including inactive
     writes: new Point with same ID, IntegrationCondition and Activity; new Name only
 }
 
 Feature CreateModule {
     input: system: Reference<System> + name: CatalogueName
     requires: related System exists
-              && name unique among Module of that System
+              && normalized name unique among all Module of that System, including inactive
     writes: Module(system, name, activity=PendingInitialActivity)
 }
 Feature EditModule {
     input: ModuleId + newName: CatalogueName
     requires: Module exists by ID
               && Module.activity == "Activo"
-              && newName unique among Modules of same System
+              && newName normalized unique among all Modules of same System, including inactive
     writes: new Point with same ID, same System, same Activity; new Name only
 }
 
 Feature CreateIncidenceType {
     input: system: Reference<System> + name: CatalogueName
     requires: related System exists
-              && name unique among IncidenceType of that System
+              && normalized name unique among all IncidenceType of that System, including inactive
     writes: IncidenceType(system, name, activity=PendingInitialActivity)
 }
 Feature EditIncidenceType {
     input: IncidenceTypeId + newName: CatalogueName
     requires: IncidenceType exists by ID
               && IncidenceType.activity == "Activo"
-              && newName unique among IncidenceType of same System
+              && newName normalized unique among all IncidenceType of same System, including inactive
     writes: new Point with same ID, same System, same Activity; new Name only
 }
 ```
@@ -243,12 +259,9 @@ Feature EditIncidenceType {
 ```pseudo
 Feature Activate<Catalogue> {
     input: Id<Catalogue>
-    requires: exists by ID
-    requires: PENDING_CONTRADICTION(
-        "La indicación literal fue: si está desactivado => error.",
-        "Pero ello haría imposible activar un elemento desactivado."
-    )
-    writes: new Point(activity="Activo") ONLY IF transition is approved
+    requires: exists by ID && current.activity == "Desactivado"
+    rejects: missing ID; current.activity == "Activo" // ya está activo
+    writes: new Point(activity="Activo"), same identity and other characteristics
 }
 
 Feature Deactivate<Catalogue> {
@@ -258,16 +271,37 @@ Feature Deactivate<Catalogue> {
     writes: new Point(activity="Desactivado"), same identity and other characteristics
 }
 
-CandidateActivationRule {
-    // Candidata, NO aprobada:
-    "Desactivado" -> "Activo"    // permitido
-    "Activo" -> "Activo"        // error: ya activo
+ActivityTransitionRules {
+    "Desactivado" -> "Activo"       // Activate: permitido
+    "Activo" -> "Activo"           // Activate: error, ya activo
+    "Activo" -> "Desactivado"       // Deactivate: permitido
+    "Desactivado" -> "Desactivado" // Deactivate: error, ya desactivado
 }
 ```
 
-**Reglas de error verificadas contra la descripción:** editar y desactivar requieren identidad existente y actividad `"Activo"`. En cualquiera de los catálogos, ID inexistente produce error. La operación **Activar requiere confirmar el tratamiento del estado actual** debido a la contradicción indicada; hasta entonces no declarar su comportamiento como terminado.
+**Reglas de error acordadas:** editar y desactivar requieren identidad existente y actividad `"Activo"`; activar requiere identidad existente y actividad `"Desactivado"`. ID inexistente siempre produce error. Activar algo ya activo y desactivar algo ya desactivado producen error. La errata anterior sobre Activar quedó expresamente corregida por Hernán.
 
-**Pendientes que sí importan:** estado inicial de actividad al crear; criterio de comparación de nombres y reserva de nombres desactivados; posibilidad de activar/desactivar módulos o incidencias cuando su System esté desactivado; precondición de actividad del System al crear Module/IncidenceType. Ninguno se deduce de la UI.
+**Pendientes que sí importan:** estado inicial de actividad al crear; equivalencia de acentos, normalización Unicode y espacios interiores; posibilidad de activar/desactivar módulos o incidencias cuando su System esté desactivado; precondición de actividad del System al crear Module/IncidenceType. Ninguno se deduce de la UI.
+
+### 3.6 Ejemplos de equivalencia para pruebas
+
+```pseudo
+NormalizeName("Pagos") == NormalizeName("pagos ")
+NormalizeName("Pagos") == NormalizeName("PAGOs")
+CreateSystem("Pagos"); CreateSystem("pagos ") => Error(DuplicateName)
+CreateSystem("Pagos"); DeactivateSystem(id); CreateSystem("PAGOs") => Error(DuplicateName)
+
+CreateModule(systemA, "Pagos"); CreateModule(systemB, "pagos ") => allowed
+CreateModule(systemA, "Pagos"); CreateModule(systemA, "PAGOs") => Error(DuplicateName)
+CreateIncidenceType(systemA, "Pagos"); CreateIncidenceType(systemA, "pagos ") => Error(DuplicateName)
+
+ActivateSystem(activeId) => Error(AlreadyActive)
+DeactivateSystem(inactiveId) => Error(AlreadyInactive)
+ActivateSystem(inactiveId) => Point(activity="Activo")
+DeactivateSystem(activeId) => Point(activity="Desactivado")
+```
+
+Estos ejemplos documentan reglas semánticas, no firmas ni códigos de error implementados.
 
 ## 4. Ticket y adjuntos
 
@@ -522,7 +556,7 @@ Los mantenedores se describen como candidatos funcionales; **no se interpretan l
 3. **Completitud de supervisión:** determinar cuándo `SupervisionCompletion` es verdadero; no confundir guardado con completitud.
 4. **Normalización de cierre:** reconciliar etiquetas de formulario e interfaz de proyección mediante decisión expresa.
 5. **Referencias a elementos externos:** precisar identidades, tipos y permisos sin asumir que los sistemas externos están integrados.
-6. **Catálogos:** unicidad y operaciones ya acordadas en §3; confirmar actividad inicial, normalización de nombres, reserva de nombres desactivados y contradicción en Activar.
+6. **Catálogos:** nombre normalizado, reserva de nombres desactivados y reglas de Activar/Desactivar acordadas en §3; confirmar actividad inicial y detalles de normalización aún abiertos.
 7. **Datos contextuales de proyecto:** precisar ubicación de código y nombre de proyecto en el modelo.
 8. **Compatibilidad:** definir pruebas de equivalencia semántica para reemplazar `ticket-service` por `ticket-service-v2`.
 9. **Coordinación:** formalización de informes y avance de Flow Orchestration siguen siendo escrituras separadas cuyo protocolo no está decidido.
