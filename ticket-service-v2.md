@@ -9,7 +9,8 @@
 ```pseudo
 Choice<"A", "B">         // selección explícita entre valores constantes
 Optional<T>             // Some<T> | None: no presume valor por defecto
-Reference<T>            // referencia conceptual, no FK ni comprobación automática
+Internal Space => <Space>Id      // solo identificador: SystemId, ModuleId, ...
+External Space => <Space>Reference  // referencia nombrada: AccountReference, ...
 Sequence<T>             // colección con restricciones indicadas
 Text(max=N)             // longitud máxima acordada si se indica N
 Date                   // fecha sin semántica de timezone todavía acordada
@@ -53,7 +54,10 @@ Value TicketId
 Value SystemId
 Value ModuleId
 Value IncidenceTypeId
-Value FolderFileId
+Value FolderFileReference       // referencia a Space externo (Folder Service)
+Value AccountReference          // referencia a Space externo (Serviu Cuentas)
+Value HRProfileReference        // referencia a Space externo (Recursos Humanos)
+Value ReferencedBusinessElementReference // referencia a concepto de otro sistema
 ```
 
 ## 2. Selecciones de constantes y referencias del Ticket
@@ -74,7 +78,7 @@ MaintainedSpace AssociatedProfileOption {
 }
 
 Derived AssociatedProfile {
-    variant: AssociatedProfileOption | Reference<External<HRProfile>>
+    variant: AssociatedProfileOption | HRProfileReference
     note: unión discriminada; no confundir con permisos de sesión.
 }
 ```
@@ -93,8 +97,8 @@ Derived RecognizableReference {
             verifiedExistence: false  // el texto no acredita la existencia
         }
       | ResolvedReference {
-            system: Reference<System>
-            element: Reference<External<ReferencedBusinessElement>>
+            system: SystemId
+            element: ReferencedBusinessElementReference
             // Identidad, clase de elemento y permisos dependen del sistema externo
         }
 
@@ -105,7 +109,7 @@ Derived RecognizableReference {
 }
 ```
 
-La referencia manual debe seguir disponible incluso en sistemas integrados. La capacidad de búsqueda requiere autorización externa. **Las clases concretas de elementos integrados y el mecanismo de resolución no están acordados**. El máximo de 50 caracteres proviene de la característica del Ticket; su aplicabilidad a cada tipo de identificador externo debe contrastarse.
+Los campos que apuntan a Spaces propios de Ticket Service usan sus identificadores (`SystemId`, `ModuleId`, `IncidenceTypeId`). Las referencias a Spaces o elementos de otros servicios se nombran `<Concepto>Reference`; no se declara `Reference<A>` genérico. La referencia manual debe seguir disponible incluso en sistemas integrados. La capacidad de búsqueda requiere autorización externa. **Las clases concretas de elementos integrados y el mecanismo de resolución no están acordados**. El máximo de 50 caracteres proviene de la característica del Ticket; su aplicabilidad a cada tipo de identificador externo debe contrastarse.
 
 ## 3. Catálogos propios de Tickets
 
@@ -158,8 +162,8 @@ Space System {
     integration: IntegrationCondition
     activationStatus: ActivationStatus                 // nuevos Points para cambios admitidos
 
-    modules: Derived<Sequence<Reference<Module>>>
-    incidenceTypes: Derived<Sequence<Reference<IncidenceType>>>
+    modules: Derived<Sequence<ModuleId>>
+    incidenceTypes: Derived<Sequence<IncidenceTypeId>>
     // Por decidir si ambas relaciones se almacenan o se consultan.
 
     invariant: id does not vary within the same System
@@ -180,7 +184,7 @@ Space System {
 Space Module {
     id: ModuleId
     name: CatalogueName
-    system: Reference<System>
+    system: SystemId
     activationStatus: ActivationStatus
 
     invariant: id and system do not change across Points
@@ -197,7 +201,7 @@ Space Module {
 Space IncidenceType {
     id: IncidenceTypeId
     name: CatalogueName
-    system: Reference<System>
+    system: SystemId
     activationStatus: ActivationStatus
 
     invariant: id and system do not change across Points
@@ -228,7 +232,7 @@ Feature EditSystem {
 }
 
 Feature CreateModule {
-    input: system: Reference<System> + name: CatalogueName
+    input: system: SystemId + name: CatalogueName
     requires: related System exists
               && normalized name unique among all Module of that System, including inactive
     writes: Module(system, name, activationStatus="Active")
@@ -242,7 +246,7 @@ Feature EditModule {
 }
 
 Feature CreateIncidenceType {
-    input: system: Reference<System> + name: CatalogueName
+    input: system: SystemId + name: CatalogueName
     requires: related System exists
               && normalized name unique among all IncidenceType of that System, including inactive
     writes: IncidenceType(system, name, activationStatus="Active")
@@ -311,7 +315,7 @@ Estos ejemplos documentan reglas semánticas, no firmas ni códigos de error imp
 Choice Risk = "Bajo" | "Medio" | "Alto"
 
 Space Attachment {
-    file: Reference<External<FolderFile>>
+    file: FolderFileReference
     name: Text(max=50)                     // incluye extensión
     sizeBytes: Integer(>0)
     immutable: true
@@ -319,12 +323,12 @@ Space Attachment {
 
 Space Ticket {
     id: TicketId                            // identidad única
-    requester: Reference<External<Account>>
+    requester: AccountReference
     incidentDate: Date(<= today)
     description: Text(max=500)
-    system: Reference<System>
-    module: Reference<Module>
-    incidenceType: Reference<IncidenceType>
+    system: SystemId
+    module: ModuleId
+    incidenceType: IncidenceTypeId
     risk: Risk
     associatedProfile: AssociatedProfile
     associatedElement: RecognizableReference

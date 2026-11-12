@@ -21,9 +21,15 @@ Este repositorio es el **cuaderno de realización** de dos servicios basados en 
 - No recuperar las Features descartadas de **edición de Ticket** ni **asignación de responsable**; tampoco introducir edición posterior de adjuntos. Conservar asociación de evidencias durante registro.
 - No añadir un `DefinitionSpace` persistido, un diseñador de estados o un motor genérico sin necesidad comprobada.
 
+## Convención de referencias
+
+- **Space interno del servicio:** conservar únicamente su identificador, por ejemplo `SystemId`, `ModuleId`, `IncidenceTypeId` o `FlowInstanceId`.
+- **Space de otro servicio:** referencia explícita denominada `<Concepto>Reference`, por ejemplo `TicketReference` para Flow Orchestration, o `AccountReference` para Ticket Service v2. No introducir `Reference<A>`.
+- Los nombres `ManualReference`, `ResolvedReference` y `RecognizableReference` describen variantes de la referencia a un **elemento externo de negocio**, no sustituyen esta convención de propiedad.
+
 ## Convención del pseudocódigo
 
-Los bloques `pseudo` describen **significado, admisibilidad, Feature, requisito y resultado**. No son sintaxis C# ni una API VSlices válida. `Choice<...>`, `Reference<...>`, `Optional<...>`, `Fin<...>` y `Point<...>` son notación de diseño. Los nombres de Features son candidatos; pueden agruparse o dividirse tras estudiar los contratos reales.
+Los bloques `pseudo` describen **significado, admisibilidad, Feature, requisito y resultado**. No son sintaxis C# ni una API VSlices válida. `Choice<...>`, `SpaceId` (interno), `SpaceReference` (externo), `Optional<...>`, `Fin<...>` y `Point<...>` son notación de diseño. Los nombres de Features son candidatos; pueden agruparse o dividirse tras estudiar los contratos reales.
 
 ## Fuentes y procedencia
 

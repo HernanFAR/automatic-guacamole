@@ -2,6 +2,16 @@
 
 **Estado:** pseudocódigo de la versión fija inicial; basado en [la definición propietaria](https://github.com/atom-dev-serviu/documentation/blob/main/systems/serviu-tickets/flow-orchestration-spaces.md). No se implementa un diseñador de flujos ni un grafo persistido.
 
+## Convención de referencias
+
+`FlowInstanceId` es identificador de un Space interno del orquestador; `TicketReference` es referencia explícita a un Space de Ticket Service v2. No se utiliza `Reference<A>`.
+
+```pseudo
+Value TicketReference       // referencia al Ticket de otro servicio
+Value FlowInstanceId        // identificador interno del orquestador
+Value TransitionId          // identificador interno de transición
+```
+
 ## 1. Selecciones constantes
 
 ```pseudo
@@ -22,7 +32,7 @@ El estado representa la **situación de la máquina**, no un Work Flow organizac
 ```pseudo
 Space FlowInstance {
     id: FlowInstanceId
-    subject: Reference<TicketId>       // subject belongs to Ticket Service
+    subject: TicketReference          // Ticket es Space externo: Ticket Service v2
     kind: FlowKind                     // "TicketSupport" in V1
     version: FlowVersion               // "V1" in V1
     currentState: TicketSupportV1State
@@ -35,7 +45,7 @@ Space FlowInstance {
 
 Space ExecutedTransition {
     id: TransitionId
-    instance: Reference<FlowInstanceId>
+    instance: FlowInstanceId           // Space interno: solo identificador
     from: TicketSupportV1State
     to: TicketSupportV1State
     occurredAt: Instant
@@ -104,7 +114,7 @@ La relación de origen y destino **no basta**: cada transición requiere satisfa
 
 ```pseudo
 Feature StartFlow {
-    input: TicketId + FlowKind("TicketSupport") + FlowVersion("V1")
+    input: TicketReference + FlowKind("TicketSupport") + FlowVersion("V1")
     requires: Ticket exists; duplicate/uniqueness policy to define
     writes: FlowInstance(initialState="Evaluación")
     guarantees: instance is bound to V1 rules
