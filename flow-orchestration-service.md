@@ -29,13 +29,16 @@ Derived FlowSubject {
 
 ## 1. Especificación y versiones
 
-**FlowSpecification es el Space conceptual principal.** Identifica una máquina de estados reconocible y tiene nombre; una especificación puede tener varias versiones. **FlowInstance es el Space de ejecución más utilizado**, no la definición de la máquina.
+**FlowSpecification es el Space conceptual principal.** Identifica una máquina de estados reconocible, con **nombre obligatorio de máximo 50 caracteres y único globalmente entre todas las especificaciones de flujo**; una especificación puede tener varias versiones. **FlowInstance es el Space de ejecución más utilizado**, no la definición de la máquina.
 
 ```pseudo
 Space FlowSpecification {
     id: FlowSpecificationId
-    name: Text(min=1, max=PendingRule("límite de nombre"))
-    // ¿Nombre normalizado y unicidad? por decidir para este catálogo.
+    name: Text(min=1, max=50)
+
+    unique: name globally across all FlowSpecifications
+    // No two FlowSpecifications may share the same name.
+    // Case/whitespace/accent normalization has not yet been agreed.
 }
 
 Space FlowSpecificationVersion {
