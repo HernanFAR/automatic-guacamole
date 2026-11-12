@@ -55,7 +55,7 @@ case SuperviseAndMaybeClose {
 
 ## 3. Decisiones todavía abiertas
 
-1. **Inicio:** quién solicita iniciar la instancia y cómo se resuelve un Ticket creado sin instancia.
+1. **Inicio:** quién solicita iniciar la instancia y cómo se resuelve un Ticket creado sin instancia. **Ya decidido:** `TicketSupport/V1` admite una sola `FlowInstance` por Ticket; su política pertenece a `FlowSpecificationVersion`, con comprobación atómica pendiente de realización.
 2. **Formalización y avance:** interfaz real de coordinación y tratamiento de fallos parciales.
 3. **Concurrencia:** cómo impedir dos avances incompatibles y garantizar que la proyección siga siendo vigente cuando se confirma la transición.
 4. **Datos históricos:** migración de `Stage` y `TicketStageTransitions` del Ticket Service actual hacia propiedad del orquestador, con reconstrucción de historia.
