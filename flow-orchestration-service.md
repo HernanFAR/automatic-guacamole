@@ -170,6 +170,8 @@ Los estados representan **situaciones de la máquina**, no necesariamente activi
 ```pseudo
 Choice EvaluationScope = "Soporte" | "Mejora"
 Choice ProjectedClosureState = "Sin cierre" | "Cerrada" | "Con observaciones"
+// V1: solo "Cerrada" aparece cuando supervisionCompleted=true.
+// Los demás estados no completan supervisión y no se proyectan en closureState.
 
 Projection TicketFlowFacts {
     evaluationCompleted: Bool
@@ -207,14 +209,14 @@ derive evaluationScope = match current EvaluationReport {
 
 derive closureState = match current SupervisionReport {
     CompletedSupervisionReport completed
-        => Some(ExplicitClosureMapping(completed.closure))
+        => Some("Cerrada") // mapeo explícito: ReportClosureState "Cerrado"
     otherwise => None
 }
 ```
 
 `EvaluationReport`, `ApprovalReport` y `SupervisionReport` son **Spaces externos** para el orquestador; el pseudocódigo de la consulta describe cómo interpretar sus datos persistidos, no incorpora sus Spaces al modelo propietario del flujo. [Las variantes y características están definidas en Ticket Service v2](ticket-service-v2.md#5-informe-de-evaluación--unión-discriminada).
 
-**Límites explícitos:** la derivación de `supervisionCompleted` depende de aprobar el criterio para producir `CompletedSupervisionReport`. El formulario de Ticket Service documenta `"Sin Cierre" | "Cerrado" | "Con observaciones"`, mientras que el contrato proyectado requiere `"Sin cierre" | "Cerrada" | "Con observaciones"`: el mapeo exacto sigue abierto y no debe implementarse silenciosamente. Las garantías de consistencia/concurrencia de lecturas y transiciones también están por definir.
+**Criterio acordado:** `CompletedSupervisionReport` existe únicamente cuando el informe tiene `closure="Cerrado"`; el orquestador proyecta ese hecho como `supervisionCompleted=true` y `closureState=Some("Cerrada")`. Para `"Sin Cierre"` o `"Con observaciones"` la supervisión sigue incompleta (`false`, `None`). Las garantías de consistencia/concurrencia de lecturas y transiciones todavía están por definir.
 
 `TicketFlowFacts` es una **proyección calculada de solo lectura**, no un agregado persistido, ni un nuevo Space con identidad independiente. Se mantiene exactamente en cinco características; no se agregan antecedentes del Ticket que no participen en condiciones.
 
@@ -251,7 +253,7 @@ function EligibleTransitions(
     }
 
 // El destino de cada transición se obtiene de su definición constante.
-// "Sin cierre" y "Con observaciones" no habilitan rutas nuevas.
+// "Sin Cierre" y "Con observaciones" en el informe no cierran la supervisión.
 // "Cerrado" no tiene transiciones salientes en V1.
 ```
 
@@ -316,9 +318,9 @@ Feature AdvanceFlow {
 | Aprobación | Aprobación incompleta | Ninguna |
 | Aprobación | Aprobación completa | Supervisión |
 | Supervisión | Supervisión incompleta | Ninguna |
-| Supervisión | Completa, Sin cierre | Ninguna |
-| Supervisión | Completa, Con observaciones | Ninguna |
-| Supervisión | Completa, Cerrada | Cerrado |
+| Supervisión | Borrador, Sin Cierre | Ninguna |
+| Supervisión | Borrador, Con observaciones | Ninguna |
+| Supervisión | Completada, Cerrada | Cerrado |
 | Cerrado | Cualquier proyección | Ninguna |
 
 Estos casos prueban la **semántica de elegibilidad**; las pruebas de autorización, coherencia de escritura y concurrencia son adicionales.

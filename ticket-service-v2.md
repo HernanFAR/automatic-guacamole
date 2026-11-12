@@ -456,7 +456,7 @@ Transform CompleteApproval(draft: DraftApprovalReport)
 
 Aplicamos también el patrón **`SupervisionReport = DraftSupervisionReport | CompletedSupervisionReport`**. Conservamos los tres campos del modelo observado; las observaciones son **opcionales en ambas variantes** y se representan mediante `Text(min=0, max=2000)`.
 
-**Límite importante:** que un informe posea estado de cierre `"Cerrado"` no es lo mismo que declarar la variante `Completed`. La nueva distinción de completitud está propuesta para nuestro diseño; **aún debe contrastarse con los seguimientos sucesivos del legacy** y con el acto organizacional de completar supervisión. No convertir todo guardado en una formalización automática.
+**Regla acordada de completitud:** la supervisión se considera completada **si y solo si** `Estado de Cierre = "Cerrado"`. Con `"Sin Cierre"` o `"Con observaciones"` no se ha cerrado; se conserva el informe como `DraftSupervisionReport` y puede evolucionar mediante nuevos Points.
 
 ```pseudo
 // Selecciones del informe según formulario documentado
@@ -480,26 +480,26 @@ Space DraftSupervisionReport extends SupervisionReport {
 }
 
 Space CompletedSupervisionReport extends SupervisionReport {
-    closure: ReportClosureState
+    closure: "Cerrado"                   // único valor admisible en Completed
     paymentRegularization: OutOfSystemPaymentRegularization
     monitoringObservations: Text(min=0, max=2000) // legítimamente opcional
 
-    evolution: none // mismo patrón de variante definitiva; verificar contra negocio
+    evolution: none // una vez cerrado, no se admiten nuevas evoluciones
 }
 
 Transform CompleteSupervision(draft: DraftSupervisionReport)
     -> Fin<CompletedSupervisionReport> {
-    requires: closure and paymentRegularization present and valid
-    requires: PendingRule("cuándo se declara completada la supervisión")
+    requires: draft.closure == Some("Cerrado")
+    requires: draft.paymentRegularization is Some(valid value)
     guarantees: same TicketId; Completed immutability
 }
 ```
 
-Esta transformación **no presupone** que solo `"Cerrado"` puede formar un Completed; la proyección acordada contempla `"Sin cierre"`, `"Cerrada"` y `"Con observaciones"` cuando `supervisionCompleted=true`. El criterio de completar, su relación con seguimientos sucesivos y la restricción de evolución posterior requieren validación; no presentamos este modelo candidato como comportamiento legacy comprobado.
+La transformación solo produce `CompletedSupervisionReport` cuando el cierre es `"Cerrado"`. Los otros valores corresponden a supervisiones aún no cerradas y admiten evolución del borrador. La historia de seguimientos intermedios sigue siendo un asunto separado de esta regla de cierre.
 
 **Límite acordado (2026-11-12):** `monitoringObservations` admite hasta 2.000 caracteres y puede estar vacío. Esta longitud corresponde al campo del informe actual; todavía falta decidir cómo representar múltiples seguimientos históricos, sin concatenarlos automáticamente.
 
-**Discrepancia de vocabulario:** formulario `"Sin Cierre" | "Cerrado" | "Con observaciones"` frente a proyección `"Sin cierre" | "Cerrada" | "Con observaciones"`. Requiere mapeo explícito antes de implementar.
+**Mapeo explícito de cierre para el orquestador:** la constante `"Cerrado"` del informe se proyecta como `"Cerrada"` en `TicketFlowFacts`. Los otros estados no constituyen un cierre y no completan la supervisión. La normalización histórica de etiquetas en otras consultas puede estudiarse aparte.
 
 ## 8. Contrato de lectura consumido por Flow Orchestration
 
@@ -507,7 +507,7 @@ Esta transformación **no presupone** que solo `"Cerrado"` puede formar un Compl
 
 Flow Orchestration consulta **directamente, en modo de solo lectura**, las tablas propietarias de Ticket Service mediante JOIN/vista SQL y construye sus cinco hechos a partir de los informes. No necesita escribir ni duplicar los datos de Ticket.
 
-La formalización de cada informe sigue siendo una responsabilidad de Ticket Service v2. El criterio organizacional de completar supervisión y el mapeo de valores de cierre siguen pendientes de acuerdo.
+Completar cada informe sigue siendo responsabilidad de Ticket Service v2. Para supervisión, solo `closure="Cerrado"` construye `CompletedSupervisionReport`; Flow Orchestration deriva la completitud de esa variante y mapea `"Cerrado" → "Cerrada"`.
 
 ## 9. Features candidatas — Ticket Service v2
 
@@ -560,7 +560,7 @@ Feature SaveSupervisionDraft {
 
 Feature CompleteSupervision {
     input: TicketId + DraftSupervisionReport
-    requires: required fields present AND pending organizational completion criterion resolved
+    requires: closure == "Cerrado" and paymentRegularization present and valid
     writes: CompletedSupervisionReport replacing same logical report
     guarantees: no further evolution under the candidate model
     doesNot: close the machine (Flow Orchestration decides that)
@@ -577,8 +577,8 @@ Los mantenedores se describen como candidatos funcionales; **no se interpretan l
 
 1. No trasladar `Stage` ni `TicketStageTransitions` del legacy a Ticket Service v2: propiedad de Flow Orchestration.
 2. No recuperar edición del Ticket, asignación responsable ni gestión posterior de adjuntos como Feature.
-3. **Completitud de supervisión:** aprobar el criterio para crear `CompletedSupervisionReport` y contrastar su irreversibilidad con seguimientos repetidos. No confundir guardar un borrador con completar.
-4. **Normalización de cierre:** reconciliar etiquetas de formulario e interfaz de proyección mediante decisión expresa.
+3. **Seguimientos de supervisión:** el criterio de completitud ya está acordado (`closure="Cerrado"`); falta precisar cómo representar el historial de seguimientos intermedios. No confundir guardar un borrador con cerrar.
+4. **Normalización de cierre:** el mapeo específico `"Cerrado" → "Cerrada"` ya está acordado para la proyección; contrastar si existen otras necesidades históricas de normalización.
 5. **Referencias a elementos externos:** precisar identidades, tipos y permisos sin asumir que los sistemas externos están integrados.
 6. **Catálogos:** nombre normalizado, reserva de nombres desactivados y reglas de Activar/Desactivar acordadas en §3; confirmar actividad inicial y detalles de normalización aún abiertos.
 7. **Datos contextuales de proyecto:** precisar ubicación de código y nombre de proyecto en el modelo.
