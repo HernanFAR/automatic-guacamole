@@ -1,5 +1,7 @@
 # Ticket Support Product — contrato transversal de integración
 
+**Decisión vigente sobre numeración y carpeta:** [Decisión 001](decisions/001-early-ticket-number.md), que sustituye la preparación provisional de FolderPath mediante GUID independiente.
+
 **Estado:** contrato **conceptual y revisable** para la PoC del 13 de noviembre de 2026. Define propiedad, conexiones, secuencias y fallos observables; **no** afirma que los nuevos servicios estén implementados o integrados E2E, ni fija endpoints, transporte o transacciones distribuidas. Complementa [Ticket Service v2](ticket-service-v2.md), [Folder Service](folder-service.md), [Flow Orchestration](flow-orchestration-service.md) y [el modelo del BFF](ticket-support-bff.md).
 
 **Procedencia de la composición existente:** [`atom-dev-serviu/ticket-support-product@4c4ee69`](https://github.com/atom-dev-serviu/ticket-support-product/tree/4c4ee69d8e7d776e0136c2c55cfe792c91f3f6f4). Los comportamientos de ese código pertenecen al Product actual y **no** implican contratos vigentes del Ticket Service v2 ni del orquestador futuro.
@@ -30,7 +32,7 @@ El **Product/BFF coordina** las invocaciones y compone respuestas para las Views
 | ¿Qué constituye un Ticket válido y sus adjuntos iniciales? | Ticket Service v2; Ticket registrado inalterable |
 | ¿Quién posee evaluación, aprobación y supervisión Draft/Completed? | Ticket Service v2 |
 | ¿Quién posee el nombre, tipo MIME, bytes y tamaño de archivos? | Folder Service; Ticket conserva únicamente referencias |
-| ¿Quién determina ubicación `FolderPath` durante la composición? | El Product debe poder derivarla según contrato todavía por acordar; Folder valida su identidad estructurada |
+| ¿Quién determina ubicación `FolderPath` durante la composición? | Ticket Service v2 asigna previamente el código; Product deriva `FolderPath(code, "TicketSupport", "Attachments")` por convención estable; Folder valida la identidad estructurada |
 | ¿Quién posee la instancia y las transiciones ejecutadas? | Flow Orchestration |
 | ¿Quién define y calcula `TicketFlowFacts`? | Flow Orchestration, mediante lectura SQL de solo lectura sobre datos propietarios de Ticket Service v2 |
 | ¿Quién evalúa si una transición es elegible? | Flow Orchestration; elegibilidad **no** sustituye autorización |
@@ -107,11 +109,13 @@ case RegisterTicketSupport {
     requester = Accounts.ResolveTrustedAccountReference()
 
     // Regla v2: Ticket nace con sus referencias; no agregar después.
-    location = Product.ResolveFolderPathBeforeTicketRegistration() // ABIERTO
+    code = TicketServiceV2.AssignNextTicketNumber() // POST, asignación única y durable
+    location = FolderPath(code, "TicketSupport", "Attachments")
     stored = each(valid evidence, FolderService.AddFile(location, evidence, requester))
 
     ticket = TicketServiceV2.RegisterTicket(
         registration.withRequester(requester)
+                    .withAssignedCode(code)
                     .withAttachmentReferences(stored.references)
     )
 
@@ -126,7 +130,7 @@ case RegisterTicketSupport {
 
 **No confundir con el Product actual:** su Hosting ejecuta `RegisterTicket → Upload → AddAttachmentReference`, porque obtiene la carpeta desde `TicketWorkspace(Code, Reference)` después de registrar. Ese orden **no puede trasladarse directamente** al Ticket v2 inalterable.
 
-**Decisión pendiente material:** derivar `FolderPath` antes de que existan el código y la referencia del Ticket. Ni la reserva anticipada de identidad ni otro mecanismo están aprobados todavía. Sin esto, el recorrido con adjuntos no está cerrado.
+**Decisión material resuelta (diseño):** [Decisión 001](decisions/001-early-ticket-number.md) establece que Ticket Service asigna previamente un código único y durable. Product deriva de él la carpeta y Ticket Service recibe ese mismo código al registrar. Siguen pendientes los contratos físicos, la forma de las referencias y el tratamiento de reintentos; la asignación anticipada no implica idempotencia automática.
 
 **Fallos parciales a representar, sin fingir transacción:** archivos subidos pero registro fallido; Ticket registrado pero `StartFlow` fallido; no duplicar Ticket o FlowInstance como respuesta automática a un reintento. El tratamiento exacto de limpieza, reintentos y recuperación sigue abierto.
 
@@ -258,7 +262,7 @@ Estas pruebas son **criterios para implementar**, no declaración de que ya fuer
 
 ## 7. Decisiones pendientes, priorizadas
 
-1. **Derivar FolderPath antes del Ticket:** resolver identificación anticipada y alcance de la referencia a archivos.
+1. **Realizar la asignación anticipada de TicketCode:** decisión de derivación de FolderPath cerrada en [Decisión 001](decisions/001-early-ticket-number.md); faltan persistencia concurrente, contrato POST, referencias externas y semántica de reintento.
 2. **Contratos reales de Ticket v2:** registro con referencias y lecturas requeridas por las Views.
 3. **Lookup de FlowInstance por Ticket y lecturas de bandeja:** no existen contratos concretos confirmados para `instanceIdFor(ticket)` o las consultas batch.
 4. **Respuestas parciales del Product:** forma observable para el usuario ante fallo de Folder, registro o Flow; recuperación proporcional a la PoC.

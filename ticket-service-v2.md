@@ -509,13 +509,23 @@ Flow Orchestration consulta **directamente, en modo de solo lectura**, las tabla
 
 Completar cada informe sigue siendo responsabilidad de Ticket Service v2. Para supervisión, solo `closure="Cerrado"` construye `CompletedSupervisionReport`; Flow Orchestration deriva la completitud de esa variante y mapea `"Cerrado" → "Cerrada"`.
 
+**Decisión posterior de integración (2026-11-13):** [Decisión 001 — asignación anticipada de número de Ticket](decisions/001-early-ticket-number.md). Ticket Service asigna un código único y durable antes del registro; `RegisterTicket` recibe ese código y comprueba su uso. El código no sustituye necesariamente `TicketId`.
+
 ## 9. Features candidatas — Ticket Service v2
 
 ```pseudo
+Feature AssignNextTicketNumber {
+    input: AuthorizedRequest
+    returns: TicketCode
+    guarantees: durable unique assignment; no reuse of issued codes
+    // POST is exposed to Product/BFF; idempotency remains open.
+}
+
 Feature RegisterTicket {
-    input: RegistrationData<Ticket> + Optional<InitialAttachments>
+    input: AssignedTicketCode + RegistrationData<Ticket> + Optional<InitialAttachments>
     requires: admissible Ticket and mandatory registration data
-    writes: Ticket
+           + code previously assigned and not consumed by another Ticket
+    writes: Ticket with supplied code
     returns: TicketId
     guarantees: Ticket registered and inalterable
     doesNot: start FlowInstance by an assumed distributed transaction

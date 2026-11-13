@@ -11,6 +11,7 @@ Este repositorio es el **cuaderno de modelado y composición** de los servicios 
 3. [Contrato transversal del Ticket Support Product — conexiones, coordinación y decisiones](integration-contract.md).
 4. [Folder Service — estado actual y preparación de integración](folder-service.md).
 5. [Ticket Support Product / BFF — composición y Features](ticket-support-bff.md).
+6. [Decisión 001 — asignación anticipada de número de Ticket y FolderPath](decisions/001-early-ticket-number.md).
 
 ## Decisiones establecidas
 

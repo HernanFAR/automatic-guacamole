@@ -1,5 +1,7 @@
 # Ticket Support Product / BFF — modelo de composición para la PoC
 
+**Decisión vigente:** [Decisión 001 — asignación anticipada de TicketCode y derivación de FolderPath](decisions/001-early-ticket-number.md) sustituye la preparación independiente de carpeta mediante GUID. El Product obtiene el código de Ticket Service **antes de subir archivos**.
+
 **Estado:** pseudocódigo de responsabilidades y Features candidato a realización, no reemplazo ya implementado. **Fecha de revisión:** 2026-11-12. **Plazo PoC:** 2026-11-13. **Fuente de código examinada:** [`atom-dev-serviu/ticket-support-product@4c4ee69d8e7d776e0136c2c55cfe792c91f3f6f4`](https://github.com/atom-dev-serviu/ticket-support-product/tree/4c4ee69d8e7d776e0136c2c55cfe792c91f3f6f4).
 
 El análisis aplica el mismo método de **Ticket Service v2**, **Flow Orchestration** y **Folder Service**: identificar significado, propiedad, contratos reales, Features, admisibilidad, resultados y preguntas abiertas. El BFF **no es propietario de los Spaces de negocio** de esos servicios; coordina actuaciones y construye representaciones para las Views.
@@ -67,7 +69,7 @@ Value TicketFolderLocation {
     concept: Text
     pathTo: Text
     // Actual: (workspace.Code, "Ticket", workspace.Reference).
-    // Para Ticket v2, el origen de las coordenadas debe acordarse.
+    // Para Ticket v2 (Decisión 001): (assignedTicketCode, "TicketSupport", "Attachments").
 }
 
 Value StoredEvidence {
@@ -123,12 +125,14 @@ Feature RegisterTicketSupport {
 
     sequence:
         // Preparar referencias ANTES de registrar Ticket.
-        location = ResolveTicketFolderLocation(input)  // mecanismo pendiente
+        code = TicketServiceV2.AssignNextTicketNumber() // POST, asignación durable y única
+        location = TicketFolderLocation(code, "TicketSupport", "Attachments")
         stored = for each evidence:
             FolderService.AddFile(location, evidence, requester)
 
         registered = TicketServiceV2.RegisterTicket(
-            input.withRequester(requester).withAttachments(stored.references)
+            input.withRequester(requester).withAssignedCode(code)
+                 .withAttachments(stored.references)
         )
 
         started = FlowOrchestration.StartFlow(
@@ -144,7 +148,7 @@ Feature RegisterTicketSupport {
 }
 ```
 
-**Tensión material:** el código actual obtiene las coordenadas `FolderPath` desde un `TicketWorkspace` *ya registrado* (`Code`, `"Ticket"`, `Reference`). Si primero debemos subir evidencias, **no podemos asumir** que disponemos de código y referencia antes de registrar. Hay que resolver expresamente la identidad anticipada de la carpeta (por ejemplo, otra clave estable) o un protocolo apropiado de preparación; **ninguna alternativa queda aprobada por este documento**.
+**Tensión resuelta conceptualmente:** el Product actual obtenía la carpeta de un Ticket ya registrado. [Decisión 001](decisions/001-early-ticket-number.md) introduce la asignación anticipada de `TicketCode` por Ticket Service, que permite derivar la carpeta tanto antes como después del registro. Quedan por definir la persistencia y exclusividad efectiva del número y la semántica de reintentos; no confundir código único con idempotencia.
 
 **Fallo parcial:** si Folder recibe algunos archivos y falla el registro de Ticket, quedan potencialmente huérfanos. Si el Ticket se registra y `StartFlow` falla, queda registrado sin instancia; la regla de una instancia por Ticket no inventa reintentos ni orquestación transaccional. El Product debe distinguir estados observables, evitar duplicar registros por redirección y no presentar éxito integral ficticio. Para la PoC no exigimos transacciones distribuidas, outbox ni mecanismos de recuperación fuertes.
 
@@ -318,7 +322,7 @@ La regresión actual cubre varias piezas con dobles (acciones, clasificación, a
 ## 10. Decisiones abiertas y propuesta de prioridades
 
 **Bloqueos semánticos directos:**
-1. **Identidad anticipada de Folder:** el BFF actual deriva `FolderPath` de código y referencia de Ticket ya creado, mientras v2 necesita referencias de archivos antes del registro.
+1. **Realización de asignación anticipada:** derivación de `FolderPath` decidida en [Decisión 001](decisions/001-early-ticket-number.md); falta adaptar `PrepareAttachmentLocation` y formalizar POST, persistencia, unicidad y contratos de reintento.
 2. **Contrato de Ticket v2:** forma real del registro que recibe `FolderFileReference`, y de lecturas/proyecciones para el Product.
 3. **Inicio del flujo:** cómo encontrar la instancia de un Ticket y evitar el doble inicio durante reintentos.
 4. **Resultados parciales:** qué respuesta visible debe producir el Product si Folder, Ticket o Flow fallan en distintos pasos.
