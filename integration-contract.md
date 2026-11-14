@@ -242,11 +242,13 @@ El Product conserva lectura/mantenimiento de `System`, `Module` e `IncidenceType
 
 ### Distribución e identidad para la siguiente implementación
 
-La [preparación de implementación](implementation-readiness.md) exige migrar incrementalmente los cuatro consumidores de template-service siguiendo `UPGRADING.md` (VSlices `0.6.0-preview.2`), sin sobrescribir árboles personalizados.
+La [preparación de implementación](implementation-readiness.md) exige migrar incrementalmente **los cuatro consumidores** de **`atom-dev-serviu/template-service v0.1.1-preview.1` a `v0.2.0-preview.1`**, siguiendo el [UPGRADING.md del tag destino](https://github.com/atom-dev-serviu/template-service/blob/v0.2.0-preview.1/UPGRADING.md) y sin sobrescribir árboles personalizados. VSlices `0.6.0-preview.2` es una dependencia de la plantilla, no su versión.
 
-El Product/BFF deberá consumir el paquete privado `Authentication.Hosting 0.1.0-preview.1` para interpretar la sesión cookie e identidad Serviu. Este paquete **no** autentica automáticamente las invocaciones a Ticket, Folder o Flow: las credenciales del invocador, su verificación y la autorización por recurso son contratos y realizaciones separados. No hacer pasar una cookie de navegador ni `X-Folder-Invocation` por prueba suficiente de autoridad; preservar la procedencia de solicitante y servicio llamante.
+**Product/BFF, Ticket Service v2, Folder Service v2 y Flow Orchestration deben reconocer cookie SSO Serviu y la identidad del usuario** mediante la adopción de Authentication `0.1.0-preview.1` de la plantilla (`Authentication.Work` en Work, `Authentication.Hosting` en Hosting y transitivas). Reconocer la cookie en cada host no acredita automáticamente que una llamada Product → Service la transporte o que conceda autoridad: verificar el transporte, la identidad del invocador y la autorización por recurso independientemente. Ni el conocimiento de la cookie ni `X-Folder-Invocation` sustituyen la autorización.
 
-La publicación del NuGet en GitHub Packages y la restauración de sus dependencias VSlices desde nuget.org son hechos de distribución, no pruebas de que los cuatro repositorios hayan instalado el paquete ni de que sus rutas estén protegidas.
+La publicación del NuGet en GitHub Packages y la restauración de sus dependencias VSlices desde nuget.org son hechos de distribución, no pruebas de que los cuatro repositorios hayan instalado el paquete ni de que sus rutas estén protegidas. La copia local actualizada de la plantilla y la caché offline de Work son preparación, no evidencia de migración consumada.
+
+**Condición obligatoria de registro:** `AssignNextTicketNumber` debe asignar un código durable y único antes de subir archivos; `RegisterTicket` **requiere ese código preasignado** y rechaza los inexistentes o ya asociados a Tickets. Ticket Service garantiza concurrencia y no genera un segundo número durante el registro. Véase [Decisión 001](decisions/001-early-ticket-number.md).
 
 ## 6. Pruebas mínimas de contrato transversal
 
