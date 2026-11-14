@@ -2,7 +2,7 @@
 
 **Estado:** pseudocódigo de diseño, no código ejecutable ni contrato implementado. Primera iteración: 2026-11-12.
 
-Este repositorio es el **cuaderno de modelado y composición** de los servicios y el Product de Ticket Support, tomando [template-service v0.1.1](https://github.com/atom-dev-serviu/template-service/tree/v0.1.1) como procedencia histórica de la primera iteración. Para realizar ahora en los servicios, consultar la [guía de actualización incremental vigente](https://github.com/atom-dev-serviu/template-service/blob/main/UPGRADING.md) y el [plan de adopción de Authentication](implementation-readiness.md). No sustituye la documentación propietaria del caso Serviu, no constituye una especificación normativa de VSlices y no presupone un motor de procesos configurable.
+Este repositorio es el **cuaderno de modelado y composición** de los servicios y el Product de Ticket Support, tomando la plantilla Serviu anterior como procedencia histórica de la primera iteración. La siguiente realización debe actualizar los cuatro consumidores desde **[template-service v0.1.1-preview.1](https://github.com/atom-dev-serviu/template-service/tree/v0.1.1-preview.1)** hasta **[v0.2.0-preview.1](https://github.com/atom-dev-serviu/template-service/tree/v0.2.0-preview.1)**, según la [guía de actualización de ese tag](https://github.com/atom-dev-serviu/template-service/blob/v0.2.0-preview.1/UPGRADING.md) y el [plan de adopción de Authentication](implementation-readiness.md). No sustituye la documentación propietaria del caso Serviu, no constituye una especificación normativa de VSlices y no presupone un motor de procesos configurable.
 
 ## Recorrido
 
@@ -27,9 +27,11 @@ Este repositorio es el **cuaderno de modelado y composición** de los servicios 
 
 ## Siguiente realización: plantilla y autenticación
 
-Los repositorios `ticket-service-v2`, `folder-service-v2`, `flow-orquestration-service` y `ticket-support-product-v2` deben actualizarse **incrementalmente** según `template-service/UPGRADING.md` a VSlices `0.6.0-preview.2`, preservando sus modelos y cambios locales. No usar el script destructivo de cambio de template como migración.
+Los repositorios `ticket-service-v2`, `folder-service-v2`, `flow-orquestration-service` y `ticket-support-product-v2` deben adoptar incrementalmente **`atom-dev-serviu/template-service v0.2.0-preview.1`** (origen `v0.1.1-preview.1`), preservando sus implementaciones. El salto de VSlices a `0.6.0-preview.2` es una dependencia de la nueva plantilla, no la versión del template. No usar el script destructivo de reemplazo para migrar código personalizado.
 
-El paquete privado `Authentication.Hosting 0.1.0-preview.1` es el punto de entrada para cookie/SSO del Product/BFF. Su publicación **no** supone que Ticket, Folder o Flow ya validen credenciales interservicio: esas fronteras requieren contrato, adaptador y autorización propios. La [preparación de implementación](implementation-readiness.md) describe alcance, dependencias y pruebas; **no registra operaciones ya ejecutadas**.
+**Los cuatro servicios**, no solo Product/BFF, deben instalar las referencias y configuración de Authentication de la plantilla y **reconocer cookie SSO e identidad del usuario autenticado**. Comprobar aparte la propagación de la sesión en llamadas entre servicios y la autorización funcional.
+
+Asimismo, Ticket Service debe **asignar durablemente el número antes del registro** y `RegisterTicket` debe exigir ese número existente, válido y libre; Product solicita la asignación antes de subir adjuntos. La [Decisión 001](decisions/001-early-ticket-number.md) y la [preparación de implementación](implementation-readiness.md) establecen condiciones y pruebas. **No se afirma que estos cambios ya se hayan ejecutado en los cuatro repositorios.**
 
 ## Alcance de la prueba de concepto
 
@@ -51,6 +53,6 @@ Los bloques `pseudo` describen **significado, admisibilidad, Feature, requisito 
 - [Features del sistema Tickets y distribución de responsabilidades](https://github.com/atom-dev-serviu/documentation/blob/main/systems/serviu-tickets/system-features.md)
 - [Spaces y transiciones de Flow Orchestration V1](https://github.com/atom-dev-serviu/documentation/blob/main/systems/serviu-tickets/flow-orchestration-spaces.md)
 - [Work Process organizacional](https://github.com/atom-dev-serviu/documentation/blob/main/organization/tickets/management-process.md)
-- [Service Template — arquitectura](https://github.com/atom-dev-serviu/template-service/blob/v0.1.1/docs/architecture/README.md)
+- [Service Template v0.2.0-preview.1 — arquitectura](https://github.com/atom-dev-serviu/template-service/blob/v0.2.0-preview.1/docs/architecture/README.md)
 
 **Límite:** crear estos documentos no crea los servicios, tablas, endpoints ni validaciones runtime.
