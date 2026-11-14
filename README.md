@@ -2,7 +2,7 @@
 
 **Estado:** pseudocódigo de diseño, no código ejecutable ni contrato implementado. Primera iteración: 2026-11-12.
 
-Este repositorio es el **cuaderno de modelado y composición** de los servicios y el Product de Ticket Support, considerando [template-service v0.1.1](https://github.com/atom-dev-serviu/template-service/tree/v0.1.1). No sustituye la documentación propietaria del caso Serviu, no constituye una especificación normativa de VSlices y no presupone un motor de procesos configurable.
+Este repositorio es el **cuaderno de modelado y composición** de los servicios y el Product de Ticket Support, tomando [template-service v0.1.1](https://github.com/atom-dev-serviu/template-service/tree/v0.1.1) como procedencia histórica de la primera iteración. Para realizar ahora en los servicios, consultar la [guía de actualización incremental vigente](https://github.com/atom-dev-serviu/template-service/blob/main/UPGRADING.md) y el [plan de adopción de Authentication](implementation-readiness.md). No sustituye la documentación propietaria del caso Serviu, no constituye una especificación normativa de VSlices y no presupone un motor de procesos configurable.
 
 ## Recorrido
 
@@ -12,6 +12,7 @@ Este repositorio es el **cuaderno de modelado y composición** de los servicios 
 4. [Folder Service — estado actual y preparación de integración](folder-service.md).
 5. [Ticket Support Product / BFF — composición y Features](ticket-support-bff.md).
 6. [Decisión 001 — asignación anticipada de número de Ticket y FolderPath](decisions/001-early-ticket-number.md).
+7. [Preparación de implementación — migración incremental de plantilla y Authentication privado](implementation-readiness.md).
 
 ## Decisiones establecidas
 
@@ -23,6 +24,12 @@ Este repositorio es el **cuaderno de modelado y composición** de los servicios 
 - Guardar un borrador **no avanza el flujo**. Formalizar datos en Ticket Service y ejecutar una transición de Flow Orchestration son responsabilidades distintas.
 - No recuperar las Features descartadas de **edición de Ticket** ni **asignación de responsable**; tampoco introducir edición posterior de adjuntos. Conservar asociación de evidencias durante registro.
 - **FlowSpecification** es el Space principal del orquestador; **FlowInstance** es el de mayor uso y ejecuta una versión compatible con el tipo de elemento. La política de admisión de instancias se define en `FlowSpecificationVersion`; en `TicketSupport/V1`, cada Ticket admite **una única FlowInstance**, incluso tras finalizar y sin duplicados por cambio de versión. No añadir editor de estados, gestión dinámica de definiciones ni un motor genérico sin necesidad comprobada.
+
+## Siguiente realización: plantilla y autenticación
+
+Los repositorios `ticket-service-v2`, `folder-service-v2`, `flow-orquestration-service` y `ticket-support-product-v2` deben actualizarse **incrementalmente** según `template-service/UPGRADING.md` a VSlices `0.6.0-preview.2`, preservando sus modelos y cambios locales. No usar el script destructivo de cambio de template como migración.
+
+El paquete privado `Authentication.Hosting 0.1.0-preview.1` es el punto de entrada para cookie/SSO del Product/BFF. Su publicación **no** supone que Ticket, Folder o Flow ya validen credenciales interservicio: esas fronteras requieren contrato, adaptador y autorización propios. La [preparación de implementación](implementation-readiness.md) describe alcance, dependencias y pruebas; **no registra operaciones ya ejecutadas**.
 
 ## Alcance de la prueba de concepto
 
