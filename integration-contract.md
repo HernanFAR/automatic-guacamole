@@ -240,6 +240,14 @@ El Product conserva lectura/mantenimiento de `System`, `Module` e `IncidenceType
 - **Fallos:** no etiquetar como fracaso total una operación de Ticket que ya quedó persistida cuando falle Flow o Audit; devolver estado parcial reconocible.
 - **PoC:** atomicidad de Points y `ExecutedTransition`, concurrencia optimista, consistencia fuerte entre servicios, colas/outbox y compensaciones garantizadas son **deseables posteriores**, no bloqueos para el 13 de noviembre. Los errores observables no deben ocultarse.
 
+### Distribución e identidad para la siguiente implementación
+
+La [preparación de implementación](implementation-readiness.md) exige migrar incrementalmente los cuatro consumidores de template-service siguiendo `UPGRADING.md` (VSlices `0.6.0-preview.2`), sin sobrescribir árboles personalizados.
+
+El Product/BFF deberá consumir el paquete privado `Authentication.Hosting 0.1.0-preview.1` para interpretar la sesión cookie e identidad Serviu. Este paquete **no** autentica automáticamente las invocaciones a Ticket, Folder o Flow: las credenciales del invocador, su verificación y la autorización por recurso son contratos y realizaciones separados. No hacer pasar una cookie de navegador ni `X-Folder-Invocation` por prueba suficiente de autoridad; preservar la procedencia de solicitante y servicio llamante.
+
+La publicación del NuGet en GitHub Packages y la restauración de sus dependencias VSlices desde nuget.org son hechos de distribución, no pruebas de que los cuatro repositorios hayan instalado el paquete ni de que sus rutas estén protegidas.
+
 ## 6. Pruebas mínimas de contrato transversal
 
 | Escenario | Qué se verifica |
